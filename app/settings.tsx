@@ -9,6 +9,11 @@ import { Prism, PrismType } from '@/constants/prism';
 import { SETTINGS_KEYS, type LocationAccuracyPreset } from '@/constants/settings-keys';
 import { getDb } from '@/db/client';
 import { getSetting, setSetting } from '@/db/queries';
+import {
+  isBackgroundLocationRunning,
+  startBackgroundLocation,
+  stopBackgroundLocation,
+} from '@/tasks/background-location-controller';
 
 const ACCURACY_PRESETS: LocationAccuracyPreset[] = ['battery', 'balanced', 'precise'];
 
@@ -26,7 +31,7 @@ export default function SettingsScreen() {
     setBackgroundGranted(bg.status === Location.PermissionStatus.GRANTED);
 
     const db = getDb();
-    setArmed(getSetting(db, SETTINGS_KEYS.armed, false));
+    setArmed(await isBackgroundLocationRunning());
     setAccuracy(getSetting<LocationAccuracyPreset>(db, SETTINGS_KEYS.locationAccuracy, 'balanced'));
     setShowGpsDebug(getSetting(db, SETTINGS_KEYS.showGpsDebug, false));
   }, []);
@@ -37,14 +42,25 @@ export default function SettingsScreen() {
     }, [refresh])
   );
 
-  const toggleArmed = (value: boolean) => {
+  const toggleArmed = async (value: boolean) => {
+    if (value) {
+      const bg = await Location.requestBackgroundPermissionsAsync();
+      if (bg.status !== Location.PermissionStatus.GRANTED) {
+        await refresh();
+        return;
+      }
+      await startBackgroundLocation(accuracy);
+    } else {
+      await stopBackgroundLocation();
+    }
     setArmed(value);
     setSetting(getDb(), SETTINGS_KEYS.armed, value);
   };
 
-  const selectAccuracy = (preset: LocationAccuracyPreset) => {
+  const selectAccuracy = async (preset: LocationAccuracyPreset) => {
     setAccuracy(preset);
     setSetting(getDb(), SETTINGS_KEYS.locationAccuracy, preset);
+    if (armed) await startBackgroundLocation(preset);
   };
 
   const toggleGpsDebug = (value: boolean) => {

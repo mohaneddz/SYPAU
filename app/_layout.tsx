@@ -8,6 +8,7 @@ import { getDb } from '@/db/client';
 import { Prism } from '@/constants/prism';
 import { useFoldStore } from '@/state/use-fold-store';
 import { useProfileStore } from '@/state/use-profile-store';
+import '@/tasks/location-task';
 
 const navTheme = {
   ...DarkTheme,
