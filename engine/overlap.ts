@@ -1,11 +1,9 @@
-import { polygonArea, polygonContainsPointWithBuffer, type LatLng } from '@/engine/geo';
+import { geometryArea, geometryContainsPoint, type LatLng } from '@/engine/geo';
 import type { Fold } from '@/types/fold';
 
 /** Folds whose geometry currently contains `point`. */
 export function activeFoldSet(point: LatLng, folds: Fold[], bufferMeters = 0): Fold[] {
-  return folds.filter(
-    (fold) => fold.enabled && polygonContainsPointWithBuffer(point, fold.geometryJson, bufferMeters)
-  );
+  return folds.filter((fold) => fold.enabled && geometryContainsPoint(point, fold.geometry, bufferMeters));
 }
 
 /**
@@ -19,7 +17,7 @@ export function resolveFold(candidates: Fold[]): Fold | null {
   return [...candidates].sort((a, b) => {
     if (b.priority !== a.priority) return b.priority - a.priority;
 
-    const areaDiff = polygonArea(a.geometryJson) - polygonArea(b.geometryJson);
+    const areaDiff = geometryArea(a.geometry) - geometryArea(b.geometry);
     if (areaDiff !== 0) return areaDiff;
 
     return b.updatedAt - a.updatedAt;

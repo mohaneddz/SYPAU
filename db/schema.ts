@@ -1,0 +1,56 @@
+export const SCHEMA_VERSION = 1;
+
+export const CREATE_TABLES_SQL = `
+CREATE TABLE IF NOT EXISTS profiles (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  presetKey TEXT,
+  configJson TEXT NOT NULL,
+  createdAt INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS folds (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  iconType TEXT NOT NULL,
+  edgeColor TEXT NOT NULL,
+  enabled INTEGER NOT NULL,
+  priority INTEGER NOT NULL,
+  geometryType TEXT NOT NULL,
+  geometryJson TEXT NOT NULL,
+  profileId TEXT NOT NULL,
+  dwellEnterMs INTEGER NOT NULL DEFAULT 8000,
+  dwellExitMs INTEGER NOT NULL DEFAULT 8000,
+  restoreOnExit INTEGER NOT NULL DEFAULT 1,
+  createdAt INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY NOT NULL,
+  ts INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  foldId TEXT,
+  payloadJson TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY NOT NULL,
+  valueJson TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alarms (
+  id TEXT PRIMARY KEY NOT NULL,
+  label TEXT NOT NULL,
+  hour INTEGER NOT NULL,
+  minute INTEGER NOT NULL,
+  enabled INTEGER NOT NULL,
+  repeatDaysJson TEXT NOT NULL,
+  soundKey TEXT NOT NULL,
+  createdAt INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL
+);
+`;

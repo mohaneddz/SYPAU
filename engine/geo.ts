@@ -1,5 +1,9 @@
 export type LatLng = { latitude: number; longitude: number };
 
+export type Geometry =
+  | { type: 'polygon'; points: LatLng[] }
+  | { type: 'circle'; center: LatLng; radiusMeters: number };
+
 const EARTH_RADIUS_METERS = 6371000;
 
 function toRadians(deg: number): number {
@@ -90,6 +94,31 @@ function distanceToSegment(point: LatLng, a: LatLng, b: LatLng): number {
     longitude: a.longitude + t * abLng,
   };
   return haversineDistance(point, closest);
+}
+
+/** Does `geometry` (+ optional hysteresis buffer) contain `point`. */
+export function geometryContainsPoint(point: LatLng, geometry: Geometry, bufferMeters = 0): boolean {
+  if (geometry.type === 'circle') {
+    return circleContainsPoint(point, geometry.center, geometry.radiusMeters, bufferMeters);
+  }
+  return polygonContainsPointWithBuffer(point, geometry.points, bufferMeters);
+}
+
+/** Approximate distance from `point` to the nearest edge of `geometry`, in meters. 0 if inside. */
+export function distanceToGeometry(point: LatLng, geometry: Geometry): number {
+  if (geometryContainsPoint(point, geometry)) return 0;
+  if (geometry.type === 'circle') {
+    return Math.max(0, haversineDistance(point, geometry.center) - geometry.radiusMeters);
+  }
+  return distanceToPolygonBorder(point, geometry.points);
+}
+
+/** Rough area of a Geometry in square meters. */
+export function geometryArea(geometry: Geometry): number {
+  if (geometry.type === 'circle') {
+    return Math.PI * geometry.radiusMeters ** 2;
+  }
+  return polygonArea(geometry.points);
 }
 
 /** Rough planar area of a polygon in square meters (shoelace formula with local meter conversion). */
