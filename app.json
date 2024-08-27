@@ -59,8 +59,7 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "expo-sqlite",
-      "expo-audio"
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
