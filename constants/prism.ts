@@ -15,3 +15,22 @@ export const EDGE_COLOR_HEX: Record<'cyan' | 'violet' | 'amber', string> = {
   violet: Prism.violet,
   amber: Prism.amber,
 };
+
+export const PrismType = {
+  h1: { fontSize: 28, lineHeight: 34, fontWeight: '700' as const, letterSpacing: 1 },
+  h2: { fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: 0 },
+  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' as const, letterSpacing: 0 },
+  caption: { fontSize: 12, lineHeight: 16, fontWeight: '500' as const, letterSpacing: 0.2 },
+};
+
+export const PrismRadii = {
+  card: 22,
+  button: 18,
+  commandRing: 28,
+};
+
+export const PrismMotion = {
+  breatheMs: 2400,
+  enterSweepMs: 600,
+  exitDissolveMs: 450,
+};
