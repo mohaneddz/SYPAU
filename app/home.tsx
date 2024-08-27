@@ -9,7 +9,7 @@ import { CommandRing } from '@/components/prism/command-ring';
 import { StatusChip } from '@/components/prism/status-chip';
 import { EDGE_COLOR_HEX, Prism, PrismType } from '@/constants/prism';
 import type { LatLng } from '@/engine/geo';
-import { activeFoldSet, resolveFold } from '@/engine/overlap';
+import { useFieldEngine } from '@/hooks/use-field-engine';
 import { useEngineStore } from '@/state/use-engine-store';
 import { useFoldStore } from '@/state/use-fold-store';
 
@@ -20,7 +20,6 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.02,
 };
 
-const HYSTERESIS_BUFFER_METERS = 15;
 const BREATHE_MIN_WIDTH = 1.5;
 const BREATHE_MAX_WIDTH = 4;
 
@@ -76,24 +75,20 @@ export default function HomeScreen() {
   }, []);
 
   const engineStatus = useEngineStore((state) => state.status);
-
-  const resolvedFold = useMemo(() => {
-    if (!currentLocation) return null;
-    const candidates = activeFoldSet(currentLocation, folds, HYSTERESIS_BUFFER_METERS);
-    return resolveFold(candidates);
-  }, [currentLocation, folds]);
+  const resolvedFoldId = useEngineStore((state) => state.resolvedFoldId);
+  const resolvedFold = useMemo(() => folds.find((f) => f.id === resolvedFoldId) ?? null, [folds, resolvedFoldId]);
 
   useEffect(() => {
     useEngineStore.getState().setLocation(currentLocation);
   }, [currentLocation]);
 
   useEffect(() => {
-    useEngineStore.getState().setResolvedFoldId(resolvedFold?.id ?? null);
-  }, [resolvedFold]);
-
-  useEffect(() => {
-    useEngineStore.getState().setStatus(permissionStatus === Location.PermissionStatus.GRANTED ? 'armed' : 'idle');
+    if (permissionStatus !== Location.PermissionStatus.GRANTED) {
+      useEngineStore.getState().setStatus('idle');
+    }
   }, [permissionStatus]);
+
+  useFieldEngine(currentLocation, folds);
 
   if (permissionStatus && permissionStatus !== Location.PermissionStatus.GRANTED) {
     return (
