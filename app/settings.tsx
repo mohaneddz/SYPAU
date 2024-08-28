@@ -1,7 +1,8 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Card } from '@/components/prism/card';
@@ -111,6 +112,18 @@ export default function SettingsScreen() {
           <Switch value={armed} onValueChange={toggleArmed} trackColor={{ true: Prism.cyan }} />
         </View>
       </Card>
+
+      <Pressable onPress={() => router.push('/alarms')}>
+        <Card style={styles.card}>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Alarms</Text>
+              <Text style={styles.cardSubtitle}>SYPAU-owned alarms that go gentle inside a Fold</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color="#8892A6" />
+          </View>
+        </Card>
+      </Pressable>
 
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>Location accuracy</Text>
