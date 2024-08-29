@@ -1,5 +1,4 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
-import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -10,8 +9,9 @@ import { Prism } from '@/constants/prism';
 import { useAlarmStore } from '@/state/use-alarm-store';
 import { useFoldStore } from '@/state/use-fold-store';
 import { useProfileStore } from '@/state/use-profile-store';
+import { setupNotificationHandler } from '@/tasks/notification-handler';
+import { getNotifications } from '@/utils/notifications';
 import '@/tasks/location-task';
-import '@/tasks/notification-handler';
 
 const navTheme = {
   ...DarkTheme,
@@ -31,14 +31,20 @@ export default function RootLayout() {
     useProfileStore.getState().load();
     useFoldStore.getState().load();
     useAlarmStore.getState().load();
+    setupNotificationHandler();
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const alarmId = response.notification.request.content.data?.alarmId;
-      if (typeof alarmId === 'string') {
-        router.push({ pathname: '/alarm-ringing', params: { alarmId } });
-      }
-    });
-    return () => subscription.remove();
+    let subscription: { remove: () => void } | null = null;
+    (async () => {
+      const Notifications = await getNotifications();
+      if (!Notifications) return;
+      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        const alarmId = response.notification.request.content.data?.alarmId;
+        if (typeof alarmId === 'string') {
+          router.push({ pathname: '/alarm-ringing', params: { alarmId } });
+        }
+      });
+    })();
+    return () => subscription?.remove();
   }, []);
 
   return (

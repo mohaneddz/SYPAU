@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
@@ -8,6 +7,7 @@ import { useAlarmStore } from '@/state/use-alarm-store';
 import { useEngineStore } from '@/state/use-engine-store';
 import { useFoldStore } from '@/state/use-fold-store';
 import { useProfileStore } from '@/state/use-profile-store';
+import { getNotifications } from '@/utils/notifications';
 
 const VIBRATE_PATTERN = [0, 400, 300];
 const GENTLE_VIBRATE_PATTERN = [0, 150, 600];
@@ -46,10 +46,13 @@ export default function AlarmRingingScreen() {
 
   const snooze = async () => {
     Vibration.cancel();
-    await Notifications.scheduleNotificationAsync({
-      content: { title: alarm?.label || 'Alarm', body: 'Snoozed', data: { alarmId: alarmId ?? '' } },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 5 * 60, repeats: false },
-    });
+    const Notifications = await getNotifications();
+    if (Notifications) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: alarm?.label || 'Alarm', body: 'Snoozed', data: { alarmId: alarmId ?? '' } },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 5 * 60, repeats: false },
+      });
+    }
     router.back();
   };
 

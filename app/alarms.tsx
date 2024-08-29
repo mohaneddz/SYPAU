@@ -1,5 +1,4 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
@@ -8,6 +7,8 @@ import { Card } from '@/components/prism/card';
 import { Prism, PrismType } from '@/constants/prism';
 import { useAlarmStore } from '@/state/use-alarm-store';
 import type { Alarm } from '@/types/alarm';
+import { isExpoGo } from '@/utils/environment';
+import { getNotifications } from '@/utils/notifications';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -25,11 +26,18 @@ export default function AlarmsScreen() {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    Notifications.requestPermissionsAsync();
+    getNotifications().then((Notifications) => Notifications?.requestPermissionsAsync());
   }, []);
 
   return (
     <View style={styles.container}>
+      {isExpoGo && (
+        <View style={styles.expoGoNotice}>
+          <Text style={styles.expoGoNoticeText}>
+            Alarms are saved here but won&apos;t actually ring in Expo Go — build a dev client to test them firing.
+          </Text>
+        </View>
+      )}
       <FlatList
         data={alarms}
         keyExtractor={(item) => item.id}
@@ -169,6 +177,20 @@ const styles = StyleSheet.create({
   list: {
     padding: 16,
     gap: 12,
+  },
+  expoGoNotice: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    backgroundColor: 'rgba(255,184,107,0.12)',
+    borderColor: Prism.amber,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  expoGoNoticeText: {
+    color: Prism.amber,
+    fontSize: 12,
+    lineHeight: 17,
   },
   emptyText: {
     color: '#8892A6',
