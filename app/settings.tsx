@@ -113,6 +113,18 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      <Pressable onPress={() => router.push('/activity')}>
+        <Card style={styles.card}>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Activity</Text>
+              <Text style={styles.cardSubtitle}>Timeline of enters, exits, and drift holds</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color="#8892A6" />
+          </View>
+        </Card>
+      </Pressable>
+
       <Pressable onPress={() => router.push('/alarms')}>
         <Card style={styles.card}>
           <View style={styles.switchRow}>

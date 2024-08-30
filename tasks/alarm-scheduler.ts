@@ -1,12 +1,14 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import type { Alarm } from '@/types/alarm';
+import { getNotifications } from '@/utils/notifications';
 
 const ALARM_CHANNEL_ID = 'sypau-alarms';
 
 export async function ensureAlarmChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   await Notifications.setNotificationChannelAsync(ALARM_CHANNEL_ID, {
     name: 'Alarms',
     importance: Notifications.AndroidImportance.MAX,
@@ -16,18 +18,23 @@ export async function ensureAlarmChannel(): Promise<void> {
 }
 
 export async function cancelAlarmNotifications(alarmId: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const mine = scheduled.filter((n) => n.content.data?.alarmId === alarmId);
   await Promise.all(mine.map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
 }
 
 export async function scheduleAlarm(alarm: Alarm): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
+
   await cancelAlarmNotifications(alarm.id);
   if (!alarm.enabled) return;
 
   await ensureAlarmChannel();
 
-  const content: Notifications.NotificationContentInput = {
+  const content: import('expo-notifications').NotificationContentInput = {
     title: alarm.label || 'Alarm',
     body: 'Tap to open SYPAU',
     data: { alarmId: alarm.id },
