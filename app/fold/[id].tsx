@@ -62,7 +62,12 @@ export default function FoldDetailScreen() {
       </View>
 
       <Card>
-        <Text style={styles.cardLabel}>Geometry</Text>
+        <View style={styles.cardRowHeader}>
+          <Text style={styles.cardLabel}>Geometry</Text>
+          <Pressable onPress={() => router.push({ pathname: '/fold/new', params: { editId: fold.id } })}>
+            <Text style={styles.changeLink}>Edit</Text>
+          </Pressable>
+        </View>
         <Text style={styles.cardValue}>
           {fold.geometry.type === 'circle' ? 'Circle' : 'Polygon'} · ~{areaLabel}
         </Text>

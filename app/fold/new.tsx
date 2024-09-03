@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import { router } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -18,6 +18,7 @@ import {
 import MapView, { Circle, Marker, Polygon, PROVIDER_GOOGLE, type MapPressEvent, type Region } from 'react-native-maps';
 
 import { Button } from '@/components/prism/button';
+import { BLUEPRINT_MAP_STYLE } from '@/constants/map-style';
 import { EDGE_COLOR_HEX, Prism, PrismType } from '@/constants/prism';
 import { ICON_TYPE_META, ICON_TYPE_ORDER } from '@/constants/icon-types';
 import type { Geometry, LatLng } from '@/engine/geo';
@@ -42,24 +43,33 @@ const MAX_RADIUS_M = 500;
 
 export default function CreateFoldScreen() {
   const mapRef = useRef<MapView>(null);
+  const { editId } = useLocalSearchParams<{ editId?: string }>();
   const addFold = useFoldStore((state) => state.addFold);
+  const updateFold = useFoldStore((state) => state.updateFold);
+  const editingFold = useFoldStore((state) => (editId ? state.folds.find((f) => f.id === editId) : undefined));
   const profiles = useProfileStore((state) => state.profiles);
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [drawMode, setDrawMode] = useState<DrawMode>('polygon');
+  const [step, setStep] = useState<1 | 2 | 3>(editingFold ? 2 : 1);
+  const [drawMode, setDrawMode] = useState<DrawMode>(editingFold?.geometry.type === 'circle' ? 'circle' : 'polygon');
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
   const [mapLayout, setMapLayout] = useState({ width: 1, height: 1 });
 
-  const [polygonPoints, setPolygonPoints] = useState<LatLng[]>([]);
-  const [circleCenter, setCircleCenter] = useState<LatLng | null>(null);
-  const [circleRadius, setCircleRadius] = useState(DEFAULT_RADIUS_M);
+  const [polygonPoints, setPolygonPoints] = useState<LatLng[]>(() =>
+    editingFold?.geometry.type === 'polygon' ? editingFold.geometry.points : []
+  );
+  const [circleCenter, setCircleCenter] = useState<LatLng | null>(() =>
+    editingFold?.geometry.type === 'circle' ? editingFold.geometry.center : null
+  );
+  const [circleRadius, setCircleRadius] = useState(() =>
+    editingFold?.geometry.type === 'circle' ? editingFold.geometry.radiusMeters : DEFAULT_RADIUS_M
+  );
   const freehandAnchor = useRef<{ coordinate: LatLng; x: number; y: number } | null>(null);
 
-  const [name, setName] = useState('');
-  const [iconType, setIconType] = useState<IconType>('custom');
-  const [edgeColor, setEdgeColor] = useState<EdgeColor>('cyan');
-  const [priority, setPriority] = useState(5);
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const [name, setName] = useState(editingFold?.name ?? '');
+  const [iconType, setIconType] = useState<IconType>(editingFold?.iconType ?? 'custom');
+  const [edgeColor, setEdgeColor] = useState<EdgeColor>(editingFold?.edgeColor ?? 'cyan');
+  const [priority, setPriority] = useState(editingFold?.priority ?? 5);
+  const [profileId, setProfileId] = useState<string | null>(editingFold?.profileId ?? null);
 
   const selectedProfileId = useMemo(() => {
     if (profileId) return profileId;
@@ -69,6 +79,14 @@ export default function CreateFoldScreen() {
 
   useMemo(() => {
     (async () => {
+      if (editingFold) {
+        const center =
+          editingFold.geometry.type === 'circle' ? editingFold.geometry.center : editingFold.geometry.points[0];
+        const nextRegion = { ...center, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+        setRegion(nextRegion);
+        mapRef.current?.animateToRegion(nextRegion, 400);
+        return;
+      }
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== Location.PermissionStatus.GRANTED) return;
       const current = await Location.getCurrentPositionAsync({});
@@ -81,6 +99,7 @@ export default function CreateFoldScreen() {
       setRegion(nextRegion);
       mapRef.current?.animateToRegion(nextRegion, 400);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const panResponder = useMemo(
@@ -173,12 +192,17 @@ export default function CreateFoldScreen() {
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    addFold({ name: trimmedName, geometry, iconType, edgeColor, priority, profileId: selectedProfileId });
+    if (editingFold) {
+      updateFold(editingFold.id, { name: trimmedName, geometry, iconType, edgeColor, priority, profileId: selectedProfileId });
+    } else {
+      addFold({ name: trimmedName, geometry, iconType, edgeColor, priority, profileId: selectedProfileId });
+    }
     router.back();
   };
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ title: editingFold ? 'Edit Fold' : 'Create Fold' }} />
       {step === 1 && (
         <View style={styles.stepContainer}>
           <Text style={styles.stepTitle}>Pick a draw mode</Text>
@@ -217,6 +241,7 @@ export default function CreateFoldScreen() {
               provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
               initialRegion={region}
               onRegionChangeComplete={setRegion}
+              customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
               scrollEnabled={drawMode !== 'freehand'}
               zoomEnabled={drawMode !== 'freehand'}
               onPress={handleMapPress}>
@@ -363,7 +388,7 @@ export default function CreateFoldScreen() {
               <Text style={styles.secondaryButtonText}>Back</Text>
             </Pressable>
             <Button onPress={save} style={{ flex: 1 }}>
-              Save Fold
+              {editingFold ? 'Save Changes' : 'Save Fold'}
             </Button>
           </View>
         </ScrollView>

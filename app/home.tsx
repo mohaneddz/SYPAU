@@ -1,13 +1,17 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Circle, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
 
 import { CommandRing } from '@/components/prism/command-ring';
 import { StatusChip } from '@/components/prism/status-chip';
+import { BLUEPRINT_MAP_STYLE } from '@/constants/map-style';
 import { EDGE_COLOR_HEX, Prism, PrismType } from '@/constants/prism';
+import { SETTINGS_KEYS } from '@/constants/settings-keys';
+import { getDb } from '@/db/client';
+import { getSetting } from '@/db/queries';
 import type { LatLng } from '@/engine/geo';
 import { useFieldEngine } from '@/hooks/use-field-engine';
 import { useEngineStore } from '@/state/use-engine-store';
@@ -29,7 +33,15 @@ export default function HomeScreen() {
 
   const [permissionStatus, setPermissionStatus] = useState<Location.PermissionStatus | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
   const [breatheWidth, setBreatheWidth] = useState(BREATHE_MIN_WIDTH);
+  const [showGpsDebug, setShowGpsDebug] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setShowGpsDebug(getSetting(getDb(), SETTINGS_KEYS.showGpsDebug, false));
+    }, [])
+  );
 
   useEffect(() => {
     (async () => {
@@ -40,6 +52,7 @@ export default function HomeScreen() {
       const initial = await Location.getCurrentPositionAsync({});
       const coords = { latitude: initial.coords.latitude, longitude: initial.coords.longitude };
       setCurrentLocation(coords);
+      setAccuracy(initial.coords.accuracy ?? null);
       mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 500);
     })();
   }, []);
@@ -56,6 +69,7 @@ export default function HomeScreen() {
             latitude: update.coords.latitude,
             longitude: update.coords.longitude,
           });
+          setAccuracy(update.coords.accuracy ?? null);
         }
       );
     })();
@@ -118,6 +132,7 @@ export default function HomeScreen() {
         initialRegion={
           currentLocation ? { ...currentLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 } : DEFAULT_REGION
         }
+        customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
         showsUserLocation>
         {folds.map((fold) => {
           const isActive = fold.id === resolvedFold?.id;
@@ -150,7 +165,26 @@ export default function HomeScreen() {
             />
           );
         })}
+
+        {showGpsDebug && currentLocation && accuracy != null && (
+          <Circle
+            center={currentLocation}
+            radius={accuracy}
+            strokeColor={Prism.violet}
+            fillColor={`${Prism.violet}22`}
+            strokeWidth={1}
+          />
+        )}
       </MapView>
+
+      {showGpsDebug && currentLocation && (
+        <View style={styles.debugOverlay} pointerEvents="none">
+          <Text style={styles.debugText}>
+            {currentLocation.latitude.toFixed(5)}, {currentLocation.longitude.toFixed(5)}
+          </Text>
+          <Text style={styles.debugText}>±{accuracy != null ? Math.round(accuracy) : '?'}m accuracy</Text>
+        </View>
+      )}
 
       <View style={styles.topBar} pointerEvents="box-none">
         <StatusChip label={engineStatus.toUpperCase()} variant={engineStatus} />
@@ -253,5 +287,21 @@ const styles = StyleSheet.create({
     ...PrismType.caption,
     color: Prism.cyan,
     fontWeight: '700',
+  },
+  debugOverlay: {
+    position: 'absolute',
+    bottom: 130,
+    left: 16,
+    backgroundColor: 'rgba(123,92,255,0.16)',
+    borderColor: Prism.violet,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  debugText: {
+    ...PrismType.caption,
+    color: Prism.violet,
+    fontVariant: ['tabular-nums'],
   },
 });

@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View
 import { Button } from '@/components/prism/button';
 import { Card } from '@/components/prism/card';
 import { Prism, PrismType } from '@/constants/prism';
+import { useFoldStore } from '@/state/use-fold-store';
 import { useProfileStore } from '@/state/use-profile-store';
 import type { AlarmIntensity } from '@/types/profile';
 
@@ -14,8 +15,25 @@ export default function ModesScreen() {
   const profiles = useProfileStore((state) => state.profiles);
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const addCustomProfile = useProfileStore((state) => state.addCustomProfile);
+  const removeProfile = useProfileStore((state) => state.removeProfile);
+  const folds = useFoldStore((state) => state.folds);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+
+  const deleteCustomProfile = (id: string, name: string) => {
+    const inUse = folds.filter((f) => f.profileId === id);
+    if (inUse.length > 0) {
+      Alert.alert(
+        'Profile in use',
+        `"${name}" is assigned to ${inUse.length} Fold${inUse.length === 1 ? '' : 's'}. Reassign ${inUse.length === 1 ? 'it' : 'them'} first.`
+      );
+      return;
+    }
+    Alert.alert('Delete profile', `Delete "${name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => removeProfile(id) },
+    ]);
+  };
 
   const createCustom = () => {
     const name = newName.trim();
@@ -80,6 +98,12 @@ export default function ModesScreen() {
                     trackColor={{ true: Prism.cyan }}
                   />
                 </View>
+
+                {profile.presetKey === null && (
+                  <Pressable onPress={() => deleteCustomProfile(profile.id, profile.name)}>
+                    <Text style={styles.deleteLink}>Delete profile</Text>
+                  </Pressable>
+                )}
               </View>
             )}
           </Card>
@@ -162,6 +186,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  deleteLink: {
+    color: '#FF6B6B',
+    fontWeight: '700',
+    fontSize: 13,
+    marginTop: 2,
   },
   newRow: {
     flexDirection: 'row',
