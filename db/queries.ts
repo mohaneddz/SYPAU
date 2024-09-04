@@ -158,6 +158,10 @@ export function insertCustomProfile(
 
 // --- folds ---
 
+export function deleteProfile(db: SQLiteDatabase, id: string): void {
+  db.runSync('DELETE FROM profiles WHERE id = ?', id);
+}
+
 export function updateProfile(db: SQLiteDatabase, id: string, patch: Partial<Pick<Profile, 'name' | 'config'>>): void {
   const current = db.getFirstSync<ProfileRow>('SELECT * FROM profiles WHERE id = ?', id);
   if (!current) return;
@@ -323,4 +327,110 @@ export function updateAlarm(db: SQLiteDatabase, id: string, patch: Partial<Omit<
 
 export function deleteAlarm(db: SQLiteDatabase, id: string): void {
   db.runSync('DELETE FROM alarms WHERE id = ?', id);
+}
+
+// --- export / import ---
+
+export type DataSnapshot = {
+  version: 1;
+  exportedAt: number;
+  profiles: Profile[];
+  folds: Fold[];
+  alarms: Alarm[];
+  settings: Record<string, unknown>;
+};
+
+export function exportAllData(db: SQLiteDatabase): DataSnapshot {
+  const settingsRows = db.getAllSync<{ key: string; valueJson: string }>('SELECT key, valueJson FROM settings');
+  const settings: Record<string, unknown> = {};
+  for (const row of settingsRows) {
+    try {
+      settings[row.key] = JSON.parse(row.valueJson);
+    } catch {
+      // skip malformed row
+    }
+  }
+
+  return {
+    version: 1,
+    exportedAt: Date.now(),
+    profiles: listProfiles(db),
+    folds: listFolds(db),
+    alarms: listAlarms(db),
+    settings,
+  };
+}
+
+/** Replaces all folds/profiles/alarms/settings with the contents of `snapshot`. Destructive. */
+export function importAllData(db: SQLiteDatabase, snapshot: DataSnapshot): void {
+  db.withTransactionSync(() => {
+    db.runSync('DELETE FROM folds');
+    db.runSync('DELETE FROM profiles');
+    db.runSync('DELETE FROM alarms');
+
+    for (const profile of snapshot.profiles) {
+      db.runSync(
+        'INSERT INTO profiles (id, name, presetKey, configJson, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+        profile.id,
+        profile.name,
+        profile.presetKey,
+        JSON.stringify(profile.config),
+        profile.createdAt,
+        profile.updatedAt
+      );
+    }
+
+    for (const fold of snapshot.folds) {
+      db.runSync(
+        `INSERT INTO folds
+          (id, name, iconType, edgeColor, enabled, priority, geometryType, geometryJson, profileId, dwellEnterMs, dwellExitMs, restoreOnExit, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        fold.id,
+        fold.name,
+        fold.iconType,
+        fold.edgeColor,
+        fold.enabled ? 1 : 0,
+        fold.priority,
+        fold.geometry.type,
+        JSON.stringify(fold.geometry),
+        fold.profileId,
+        fold.dwellEnterMs,
+        fold.dwellExitMs,
+        fold.restoreOnExit ? 1 : 0,
+        fold.createdAt,
+        fold.updatedAt
+      );
+    }
+
+    for (const alarm of snapshot.alarms) {
+      db.runSync(
+        'INSERT INTO alarms (id, label, hour, minute, enabled, repeatDaysJson, soundKey, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        alarm.id,
+        alarm.label,
+        alarm.hour,
+        alarm.minute,
+        alarm.enabled ? 1 : 0,
+        JSON.stringify(alarm.repeatDays),
+        alarm.soundKey,
+        alarm.createdAt,
+        alarm.updatedAt
+      );
+    }
+
+    for (const [key, value] of Object.entries(snapshot.settings ?? {})) {
+      setSetting(db, key, value);
+    }
+  });
+}
+
+/** Deletes every Fold, Profile, Alarm, and Event, then reseeds the default profiles. Destructive. */
+export function resetAllData(db: SQLiteDatabase): void {
+  db.withTransactionSync(() => {
+    db.runSync('DELETE FROM folds');
+    db.runSync('DELETE FROM profiles');
+    db.runSync('DELETE FROM alarms');
+    db.runSync('DELETE FROM events');
+    db.runSync('DELETE FROM settings');
+  });
+  seedDefaultProfiles(db);
 }

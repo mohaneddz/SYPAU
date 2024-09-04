@@ -1,20 +1,34 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import * as DocumentPicker from 'expo-document-picker';
+import { File, Paths } from 'expo-file-system';
 import * as Location from 'expo-location';
 import { useCallback, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Card } from '@/components/prism/card';
 import { Prism, PrismType } from '@/constants/prism';
 import { SETTINGS_KEYS, type LocationAccuracyPreset } from '@/constants/settings-keys';
 import { getDb } from '@/db/client';
-import { getSetting, setSetting } from '@/db/queries';
+import {
+  exportAllData,
+  getSetting,
+  importAllData,
+  resetAllData,
+  setSetting,
+  type DataSnapshot,
+} from '@/db/queries';
+import { useAlarmStore } from '@/state/use-alarm-store';
+import { useFoldStore } from '@/state/use-fold-store';
+import { useProfileStore } from '@/state/use-profile-store';
 import {
   isBackgroundLocationRunning,
   startBackgroundLocation,
   stopBackgroundLocation,
 } from '@/tasks/background-location-controller';
+import { scheduleAlarm } from '@/tasks/alarm-scheduler';
 
 const ACCURACY_PRESETS: LocationAccuracyPreset[] = ['battery', 'balanced', 'precise'];
 
@@ -67,6 +81,88 @@ export default function SettingsScreen() {
   const toggleGpsDebug = (value: boolean) => {
     setShowGpsDebug(value);
     setSetting(getDb(), SETTINGS_KEYS.showGpsDebug, value);
+  };
+
+  const reloadAllStores = () => {
+    useProfileStore.getState().load();
+    useFoldStore.getState().load();
+    useAlarmStore.getState().load();
+  };
+
+  const exportData = async () => {
+    try {
+      const snapshot = exportAllData(getDb());
+      const file = new File(Paths.cache, `sypau-export-${Date.now()}.json`);
+      if (file.exists) file.delete();
+      file.create();
+      file.write(JSON.stringify(snapshot, null, 2));
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Export SYPAU data' });
+      } else {
+        Alert.alert('Exported', `Saved to ${file.uri}`);
+      }
+    } catch (err) {
+      Alert.alert('Export failed', err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const importData = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+
+      Alert.alert(
+        'Replace all data?',
+        `Importing "${asset.name}" will replace all current Folds, profiles, and alarms. This can't be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Replace',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const text = await (await fetch(asset.uri)).text();
+                const snapshot = JSON.parse(text) as DataSnapshot;
+                if (snapshot.version !== 1 || !Array.isArray(snapshot.folds) || !Array.isArray(snapshot.profiles)) {
+                  Alert.alert('Invalid file', 'This does not look like a SYPAU export.');
+                  return;
+                }
+                importAllData(getDb(), snapshot);
+                reloadAllStores();
+                for (const alarm of snapshot.alarms) {
+                  if (alarm.enabled) scheduleAlarm(alarm);
+                }
+                Alert.alert('Import complete', 'Your data has been replaced.');
+              } catch (err) {
+                Alert.alert('Import failed', err instanceof Error ? err.message : String(err));
+              }
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      Alert.alert('Import failed', err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const confirmResetAllData = () => {
+    Alert.alert(
+      'Reset all data?',
+      'This permanently deletes every Fold, profile, alarm, and activity log. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            resetAllData(getDb());
+            reloadAllStores();
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -159,8 +255,28 @@ export default function SettingsScreen() {
       </Card>
 
       <Card style={styles.card}>
+        <Text style={styles.cardTitle}>Data</Text>
+        <Text style={styles.cardSubtitle}>Export your Folds, profiles, and alarms as JSON, or restore from a file.</Text>
+        <View style={styles.row}>
+          <Pressable style={styles.secondaryButton} onPress={exportData}>
+            <Text style={styles.secondaryButtonText}>Export</Text>
+          </Pressable>
+          <Pressable style={styles.secondaryButton} onPress={importData}>
+            <Text style={styles.secondaryButtonText}>Import</Text>
+          </Pressable>
+        </View>
+      </Card>
+
+      <Card style={styles.card}>
         <Text style={styles.cardTitle}>About</Text>
         <Text style={styles.cardSubtitle}>SYPAU v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+      </Card>
+
+      <Card style={styles.card}>
+        <Text style={styles.dangerTitle}>Danger zone</Text>
+        <Pressable style={styles.dangerButton} onPress={confirmResetAllData}>
+          <Text style={styles.dangerButtonText}>Reset all data</Text>
+        </Pressable>
       </Card>
     </ScrollView>
   );
@@ -233,6 +349,31 @@ const styles = StyleSheet.create({
   },
   pillTextSelected: {
     color: Prism.ashPaper,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: Prism.ashPaper,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  dangerTitle: {
+    ...PrismType.caption,
+    color: '#FF6B6B',
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  dangerButton: {
+    alignSelf: 'flex-start',
+  },
+  dangerButtonText: {
+    color: '#FF6B6B',
     fontWeight: '700',
   },
 });
