@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import MapView, { Circle, Marker, Polygon, PROVIDER_GOOGLE, type MapPressEvent, type Region } from 'react-native-maps';
 
+import { ErrorBoundary } from '@/components/error-boundary';
 import { Button } from '@/components/prism/button';
 import { BLUEPRINT_MAP_STYLE } from '@/constants/map-style';
 import { EDGE_COLOR_HEX, Prism, PrismType } from '@/constants/prism';
@@ -25,6 +26,7 @@ import type { Geometry, LatLng } from '@/engine/geo';
 import { useFoldStore } from '@/state/use-fold-store';
 import { useProfileStore } from '@/state/use-profile-store';
 import type { EdgeColor, IconType } from '@/types/fold';
+import { canRenderGoogleMaps } from '@/utils/maps-config';
 
 type DrawMode = 'polygon' | 'circle' | 'freehand';
 
@@ -40,6 +42,7 @@ const DEFAULT_RADIUS_M = 80;
 const RADIUS_STEP_M = 20;
 const MIN_RADIUS_M = 20;
 const MAX_RADIUS_M = 500;
+const mapsAvailable = canRenderGoogleMaps();
 
 export default function CreateFoldScreen() {
   const mapRef = useRef<MapView>(null);
@@ -89,15 +92,19 @@ export default function CreateFoldScreen() {
       }
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== Location.PermissionStatus.GRANTED) return;
-      const current = await Location.getCurrentPositionAsync({});
-      const nextRegion = {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      };
-      setRegion(nextRegion);
-      mapRef.current?.animateToRegion(nextRegion, 400);
+      try {
+        const current = await Location.getCurrentPositionAsync({});
+        const nextRegion = {
+          latitude: current.coords.latitude,
+          longitude: current.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        };
+        setRegion(nextRegion);
+        mapRef.current?.animateToRegion(nextRegion, 400);
+      } catch {
+        // No fix yet — fall back to the default region.
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -235,41 +242,59 @@ export default function CreateFoldScreen() {
       {step === 2 && (
         <View style={styles.mapStep}>
           <View style={styles.mapWrapper} onLayout={handleMapLayout} {...panResponder.panHandlers}>
-            <MapView
-              ref={mapRef}
-              style={StyleSheet.absoluteFill}
-              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-              initialRegion={region}
-              onRegionChangeComplete={setRegion}
-              customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
-              scrollEnabled={drawMode !== 'freehand'}
-              zoomEnabled={drawMode !== 'freehand'}
-              onPress={handleMapPress}>
-              {drawMode !== 'circle' && polygonPoints.length > 0 && (
-                <Polygon
-                  coordinates={polygonPoints}
-                  strokeColor={Prism.cyan}
-                  fillColor={`${Prism.cyan}22`}
-                  strokeWidth={2}
-                  lineDashPattern={drawMode === 'polygon' ? [6, 4] : undefined}
-                />
-              )}
-              {drawMode === 'polygon' &&
-                polygonPoints.map((point, index) => (
-                  <Marker key={index} coordinate={point} anchor={{ x: 0.5, y: 0.5 }}>
-                    <View style={styles.vertexMarker} />
-                  </Marker>
-                ))}
-              {drawMode === 'circle' && circleCenter && (
-                <Circle
-                  center={circleCenter}
-                  radius={circleRadius}
-                  strokeColor={Prism.cyan}
-                  fillColor={`${Prism.cyan}22`}
-                  strokeWidth={2}
-                />
-              )}
-            </MapView>
+            {mapsAvailable ? (
+              <ErrorBoundary
+                label="Create Fold map"
+                fallback={
+                  <View style={styles.mapFallback}>
+                    <MaterialIcons name="map" size={28} color="#4B5568" />
+                    <Text style={styles.mapFallbackText}>
+                      Map unavailable — check the Google Maps API key in app.json
+                    </Text>
+                  </View>
+                }>
+                <MapView
+                  ref={mapRef}
+                  style={StyleSheet.absoluteFill}
+                  provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+                  initialRegion={region}
+                  onRegionChangeComplete={setRegion}
+                  customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
+                  scrollEnabled={drawMode !== 'freehand'}
+                  zoomEnabled={drawMode !== 'freehand'}
+                  onPress={handleMapPress}>
+                  {drawMode !== 'circle' && polygonPoints.length > 0 && (
+                    <Polygon
+                      coordinates={polygonPoints}
+                      strokeColor={Prism.cyan}
+                      fillColor={`${Prism.cyan}22`}
+                      strokeWidth={2}
+                      lineDashPattern={drawMode === 'polygon' ? [6, 4] : undefined}
+                    />
+                  )}
+                  {drawMode === 'polygon' &&
+                    polygonPoints.map((point, index) => (
+                      <Marker key={index} coordinate={point} anchor={{ x: 0.5, y: 0.5 }}>
+                        <View style={styles.vertexMarker} />
+                      </Marker>
+                    ))}
+                  {drawMode === 'circle' && circleCenter && (
+                    <Circle
+                      center={circleCenter}
+                      radius={circleRadius}
+                      strokeColor={Prism.cyan}
+                      fillColor={`${Prism.cyan}22`}
+                      strokeWidth={2}
+                    />
+                  )}
+                </MapView>
+              </ErrorBoundary>
+            ) : (
+              <View style={styles.mapFallback}>
+                <MaterialIcons name="map" size={28} color="#4B5568" />
+                <Text style={styles.mapFallbackText}>Map unavailable — add a Google Maps API key in app.json</Text>
+              </View>
+            )}
           </View>
 
           {drawMode === 'circle' && circleCenter && (
@@ -437,6 +462,18 @@ const styles = StyleSheet.create({
   },
   mapWrapper: {
     flex: 1,
+  },
+  mapFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 40,
+  },
+  mapFallbackText: {
+    ...PrismType.body,
+    color: '#8892A6',
+    textAlign: 'center',
   },
   vertexMarker: {
     width: 10,

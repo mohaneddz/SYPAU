@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { ErrorBoundary } from '@/components/error-boundary';
 import { getDb } from '@/db/client';
 import { Prism } from '@/constants/prism';
 import { useAlarmStore } from '@/state/use-alarm-store';
@@ -49,28 +50,30 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={navTheme}>
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: Prism.deepCharcoal },
-          headerTintColor: Prism.ashPaper,
-          headerTitleStyle: { fontWeight: '700' },
-          contentStyle: { backgroundColor: Prism.inkBlack },
-        }}>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="home" options={{ headerShown: false }} />
-        <Stack.Screen name="fields" options={{ title: 'My Fields' }} />
-        <Stack.Screen name="modes" options={{ title: 'Modes' }} />
-        <Stack.Screen name="activity" options={{ title: 'Activity' }} />
-        <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-        <Stack.Screen name="alarms" options={{ title: 'Alarms' }} />
-        <Stack.Screen
-          name="alarm-ringing"
-          options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
-        />
-        <Stack.Screen name="fold/new" options={{ title: 'Create Fold', presentation: 'modal' }} />
-        <Stack.Screen name="fold/[id]" options={{ title: 'Fold Detail' }} />
-      </Stack>
+      <ErrorBoundary label="RootLayout">
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: Prism.deepCharcoal },
+            headerTintColor: Prism.ashPaper,
+            headerTitleStyle: { fontWeight: '700' },
+            contentStyle: { backgroundColor: Prism.inkBlack },
+          }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          <Stack.Screen name="home" options={{ headerShown: false }} />
+          <Stack.Screen name="fields" options={{ title: 'My Fields' }} />
+          <Stack.Screen name="modes" options={{ title: 'Modes' }} />
+          <Stack.Screen name="activity" options={{ title: 'Activity' }} />
+          <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+          <Stack.Screen name="alarms" options={{ title: 'Alarms' }} />
+          <Stack.Screen
+            name="alarm-ringing"
+            options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+          />
+          <Stack.Screen name="fold/new" options={{ title: 'Create Fold', presentation: 'modal' }} />
+          <Stack.Screen name="fold/[id]" options={{ title: 'Fold Detail' }} />
+        </Stack>
+      </ErrorBoundary>
       <StatusBar style="light" />
     </ThemeProvider>
   );
