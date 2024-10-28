@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Circle, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
 
+import { ErrorBoundary } from '@/components/error-boundary';
 import { CommandRing } from '@/components/prism/command-ring';
 import { StatusChip } from '@/components/prism/status-chip';
 import { BLUEPRINT_MAP_STYLE } from '@/constants/map-style';
@@ -16,6 +17,7 @@ import type { LatLng } from '@/engine/geo';
 import { useFieldEngine } from '@/hooks/use-field-engine';
 import { useEngineStore } from '@/state/use-engine-store';
 import { useFoldStore } from '@/state/use-fold-store';
+import { canRenderGoogleMaps } from '@/utils/maps-config';
 
 const DEFAULT_REGION = {
   latitude: 37.78825,
@@ -26,6 +28,7 @@ const DEFAULT_REGION = {
 
 const BREATHE_MIN_WIDTH = 1.5;
 const BREATHE_MAX_WIDTH = 4;
+const mapsAvailable = canRenderGoogleMaps();
 
 export default function HomeScreen() {
   const mapRef = useRef<MapView>(null);
@@ -49,11 +52,15 @@ export default function HomeScreen() {
       setPermissionStatus(status);
       if (status !== Location.PermissionStatus.GRANTED) return;
 
-      const initial = await Location.getCurrentPositionAsync({});
-      const coords = { latitude: initial.coords.latitude, longitude: initial.coords.longitude };
-      setCurrentLocation(coords);
-      setAccuracy(initial.coords.accuracy ?? null);
-      mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 500);
+      try {
+        const initial = await Location.getCurrentPositionAsync({});
+        const coords = { latitude: initial.coords.latitude, longitude: initial.coords.longitude };
+        setCurrentLocation(coords);
+        setAccuracy(initial.coords.accuracy ?? null);
+        mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 500);
+      } catch {
+        // No fix yet — watchPositionAsync below will pick it up once available.
+      }
     })();
   }, []);
 
@@ -125,57 +132,73 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        initialRegion={
-          currentLocation ? { ...currentLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 } : DEFAULT_REGION
-        }
-        customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
-        showsUserLocation>
-        {folds.map((fold) => {
-          const isActive = fold.id === resolvedFold?.id;
-          const strokeColor = EDGE_COLOR_HEX[fold.edgeColor];
-          const strokeWidth = isActive ? breatheWidth : 1.5;
-          const onPress = () => router.push({ pathname: '/fold/[id]', params: { id: fold.id } });
+      {mapsAvailable ? (
+        <ErrorBoundary
+          label="Home map"
+          fallback={
+            <View style={styles.mapFallback}>
+              <MaterialIcons name="map" size={28} color="#4B5568" />
+              <Text style={styles.mapFallbackText}>Map unavailable — check the Google Maps API key in app.json</Text>
+            </View>
+          }>
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFill}
+            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+            initialRegion={
+              currentLocation ? { ...currentLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 } : DEFAULT_REGION
+            }
+            customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
+            showsUserLocation>
+            {folds.map((fold) => {
+              const isActive = fold.id === resolvedFold?.id;
+              const strokeColor = EDGE_COLOR_HEX[fold.edgeColor];
+              const strokeWidth = isActive ? breatheWidth : 1.5;
+              const onPress = () => router.push({ pathname: '/fold/[id]', params: { id: fold.id } });
 
-          if (fold.geometry.type === 'circle') {
-            // MapCircle has no onPress — reachable via My Fields instead.
-            return (
+              if (fold.geometry.type === 'circle') {
+                // MapCircle has no onPress — reachable via My Fields instead.
+                return (
+                  <Circle
+                    key={fold.id}
+                    center={fold.geometry.center}
+                    radius={fold.geometry.radiusMeters}
+                    strokeColor={strokeColor}
+                    fillColor={`${strokeColor}33`}
+                    strokeWidth={strokeWidth}
+                  />
+                );
+              }
+              return (
+                <Polygon
+                  key={fold.id}
+                  coordinates={fold.geometry.points}
+                  strokeColor={strokeColor}
+                  fillColor={`${strokeColor}33`}
+                  strokeWidth={strokeWidth}
+                  tappable
+                  onPress={onPress}
+                />
+              );
+            })}
+
+            {showGpsDebug && currentLocation && accuracy != null && (
               <Circle
-                key={fold.id}
-                center={fold.geometry.center}
-                radius={fold.geometry.radiusMeters}
-                strokeColor={strokeColor}
-                fillColor={`${strokeColor}33`}
-                strokeWidth={strokeWidth}
+                center={currentLocation}
+                radius={accuracy}
+                strokeColor={Prism.violet}
+                fillColor={`${Prism.violet}22`}
+                strokeWidth={1}
               />
-            );
-          }
-          return (
-            <Polygon
-              key={fold.id}
-              coordinates={fold.geometry.points}
-              strokeColor={strokeColor}
-              fillColor={`${strokeColor}33`}
-              strokeWidth={strokeWidth}
-              tappable
-              onPress={onPress}
-            />
-          );
-        })}
-
-        {showGpsDebug && currentLocation && accuracy != null && (
-          <Circle
-            center={currentLocation}
-            radius={accuracy}
-            strokeColor={Prism.violet}
-            fillColor={`${Prism.violet}22`}
-            strokeWidth={1}
-          />
-        )}
-      </MapView>
+            )}
+          </MapView>
+        </ErrorBoundary>
+      ) : (
+        <View style={styles.mapFallback}>
+          <MaterialIcons name="map" size={28} color="#4B5568" />
+          <Text style={styles.mapFallbackText}>Map unavailable — add a Google Maps API key in app.json</Text>
+        </View>
+      )}
 
       {showGpsDebug && currentLocation && (
         <View style={styles.debugOverlay} pointerEvents="none">
@@ -303,5 +326,17 @@ const styles = StyleSheet.create({
     ...PrismType.caption,
     color: Prism.violet,
     fontVariant: ['tabular-nums'],
+  },
+  mapFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 40,
+  },
+  mapFallbackText: {
+    ...PrismType.body,
+    color: '#8892A6',
+    textAlign: 'center',
   },
 });
