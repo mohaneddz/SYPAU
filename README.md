@@ -1,50 +1,52 @@
-# Welcome to your Expo app 👋
+# SYPAU
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**SYPAU** ("Shut Your Phone Alarm Up," working name "Silence Origami") is an Android-focused geofencing app built with Expo, React Native, and TypeScript. Draw zones called **Folds** on a map, assign each one an alarm **Profile**, and SYPAU automatically goes gentle (vibrate/low volume) on your alarms and notifications while you're inside a Fold — then restores normal behavior when you leave.
 
-## Get started
+It ships its own design system, **Prism**, built around a map-centric home screen, a "Command Ring" in place of a bottom tab bar, and a blueprint/paper-fold visual identity.
 
-1. Install dependencies
+## Features
 
-   ```bash
-   npm install
-   ```
+- Draw circular or polygon Folds on a map and resolve which zone is active on overlap
+- Field Engine (`engine/field-engine.ts`, `engine/geo.ts`, `engine/overlap.ts`) handling dwell gating, GPS-drift holding, and enter/exit/overlap event logging
+- Background location monitoring via `expo-task-manager` so geofencing keeps working while the app isn't in the foreground
+- SYPAU-owned alarms that automatically go gentle inside a Fold
+- Full screen set: Map Home, Command Ring nav, Activity, Alarms, Fields, Fold detail/new, Modes, Onboarding, Settings
+- Fold geometry editing, a GPS debug view, and data export
+- Custom Prism component library (button, card, command-ring, prism-edge, status-chip)
 
-2. Start the app
+## Tech stack
 
-   ```bash
-   npx expo start
-   ```
+Expo SDK 54 · React Native 0.81 · React 19 (new architecture) · expo-router v6 · TypeScript · Zustand · expo-sqlite · @maplibre/maplibre-react-native · expo-location + expo-task-manager (background geofencing) · expo-notifications · react-native-reanimated / gesture-handler · pnpm
 
-In the output, you'll find options to open the app in a
+## Current status
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Active development, Android-focused. Map + geofencing MVP, the Field Engine, background location, and the SYPAU-alarm MVP all work and have been verified against real-device crashes (the most recent commit fixed a map-related crash found on a physical device).
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Not yet implemented, by design of the current Expo-managed build:
+- Forcing system Do Not Disturb or changing system ringer/alarm volume
+- True native geofencing APIs (would need a custom dev client / native modules)
 
-## Get a fresh project
+A map-config refactor (moving from `utils/maps-config.ts` to `constants/map-style.json` + `utils/map-geo.ts`) is in progress and not yet committed.
 
-When you're ready, run:
+## Getting started
 
 ```bash
-npm run reset-project
+pnpm install
+pnpm expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Background location and geofencing require permissions (`ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE_LOCATION`) that only work in a development build, not Expo Go:
 
-## Learn more
+```bash
+npx expo run:android
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Project layout
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```
+app/          screens (expo-router)        engine/       geofencing + field logic
+components/   UI, including prism/         tasks/         background location + alarms
+state/        Zustand stores                constants/     map style, routes
+```
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+See `.idea/plan.md` for the fuller product/build plan.
