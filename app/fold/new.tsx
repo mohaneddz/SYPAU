@@ -2,11 +2,20 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import {
+  Camera,
+  type CameraRef,
+  GeoJSONSource,
+  Layer,
+  Map as MapLibreMap,
+  Marker,
+  type MapRef,
+  type PressEvent,
+} from '@maplibre/maplibre-react-native';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import {
   Alert,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,38 +23,36 @@ import {
   TextInput,
   View,
   type LayoutChangeEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
-import MapView, { Circle, Marker, Polygon, PROVIDER_GOOGLE, type MapPressEvent, type Region } from 'react-native-maps';
 
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Button } from '@/components/prism/button';
 import { BLUEPRINT_MAP_STYLE } from '@/constants/map-style';
 import { EDGE_COLOR_HEX, Prism, PrismType } from '@/constants/prism';
 import { ICON_TYPE_META, ICON_TYPE_ORDER } from '@/constants/icon-types';
-import type { Geometry, LatLng } from '@/engine/geo';
+import { circlePolygonPoints, type Geometry, type LatLng } from '@/engine/geo';
 import { useFoldStore } from '@/state/use-fold-store';
 import { useProfileStore } from '@/state/use-profile-store';
 import type { EdgeColor, IconType } from '@/types/fold';
-import { canRenderGoogleMaps } from '@/utils/maps-config';
+import { fromLngLat, pointsToLngLatRing, toLngLat, type LngLat } from '@/utils/map-geo';
 
 type DrawMode = 'polygon' | 'circle' | 'freehand';
+type LngLatBounds = [west: number, south: number, east: number, north: number];
 
-const DEFAULT_REGION: Region = {
-  latitude: 37.78825,
-  longitude: -122.4324,
-  latitudeDelta: 0.02,
-  longitudeDelta: 0.02,
-};
+const DEFAULT_CENTER: LatLng = { latitude: 37.78825, longitude: -122.4324 };
+const DEFAULT_ZOOM = 14;
+const FOCUSED_ZOOM = 16;
 
 const MIN_FREEHAND_POINT_DISTANCE_PX = 10;
 const DEFAULT_RADIUS_M = 80;
 const RADIUS_STEP_M = 20;
 const MIN_RADIUS_M = 20;
 const MAX_RADIUS_M = 500;
-const mapsAvailable = canRenderGoogleMaps();
 
 export default function CreateFoldScreen() {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapRef>(null);
+  const cameraRef = useRef<CameraRef>(null);
   const { editId } = useLocalSearchParams<{ editId?: string }>();
   const addFold = useFoldStore((state) => state.addFold);
   const updateFold = useFoldStore((state) => state.updateFold);
@@ -54,7 +61,7 @@ export default function CreateFoldScreen() {
 
   const [step, setStep] = useState<1 | 2 | 3>(editingFold ? 2 : 1);
   const [drawMode, setDrawMode] = useState<DrawMode>(editingFold?.geometry.type === 'circle' ? 'circle' : 'polygon');
-  const [region, setRegion] = useState<Region>(DEFAULT_REGION);
+  const [mapBounds, setMapBounds] = useState<LngLatBounds | null>(null);
   const [mapLayout, setMapLayout] = useState({ width: 1, height: 1 });
 
   const [polygonPoints, setPolygonPoints] = useState<LatLng[]>(() =>
@@ -80,30 +87,27 @@ export default function CreateFoldScreen() {
     return match?.id ?? profiles[0]?.id ?? null;
   }, [profileId, profiles, iconType]);
 
-  useMemo(() => {
+  const initialCenter = useMemo<LatLng>(() => {
+    if (editingFold) {
+      return editingFold.geometry.type === 'circle' ? editingFold.geometry.center : editingFold.geometry.points[0];
+    }
+    return DEFAULT_CENTER;
+  }, [editingFold]);
+
+  useEffect(() => {
+    if (editingFold) {
+      cameraRef.current?.easeTo({ center: toLngLat(initialCenter), zoom: FOCUSED_ZOOM, duration: 400 });
+      return;
+    }
     (async () => {
-      if (editingFold) {
-        const center =
-          editingFold.geometry.type === 'circle' ? editingFold.geometry.center : editingFold.geometry.points[0];
-        const nextRegion = { ...center, latitudeDelta: 0.01, longitudeDelta: 0.01 };
-        setRegion(nextRegion);
-        mapRef.current?.animateToRegion(nextRegion, 400);
-        return;
-      }
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== Location.PermissionStatus.GRANTED) return;
       try {
         const current = await Location.getCurrentPositionAsync({});
-        const nextRegion = {
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        };
-        setRegion(nextRegion);
-        mapRef.current?.animateToRegion(nextRegion, 400);
+        const coords = { latitude: current.coords.latitude, longitude: current.coords.longitude };
+        cameraRef.current?.easeTo({ center: toLngLat(coords), zoom: FOCUSED_ZOOM, duration: 400 });
       } catch {
-        // No fix yet — fall back to the default region.
+        // No fix yet — fall back to the default center.
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,21 +120,23 @@ export default function CreateFoldScreen() {
         onMoveShouldSetPanResponder: () => drawMode === 'freehand',
         onPanResponderGrant: async (event) => {
           const { locationX, locationY } = event.nativeEvent;
-          const coordinate = await mapRef.current?.coordinateForPoint({ x: locationX, y: locationY });
-          if (!coordinate) return;
+          const lngLat = await mapRef.current?.unproject([locationX, locationY]);
+          if (!lngLat) return;
+          const coordinate = fromLngLat(lngLat);
           freehandAnchor.current = { coordinate, x: locationX, y: locationY };
           setPolygonPoints([coordinate]);
         },
         onPanResponderMove: (event) => {
           const anchor = freehandAnchor.current;
-          if (!anchor || mapLayout.width <= 1) return;
+          if (!anchor || mapLayout.width <= 1 || !mapBounds) return;
           const { locationX, locationY } = event.nativeEvent;
           const dx = locationX - anchor.x;
           const dy = locationY - anchor.y;
           if (Math.hypot(dx, dy) < MIN_FREEHAND_POINT_DISTANCE_PX) return;
 
-          const lngPerPx = region.longitudeDelta / mapLayout.width;
-          const latPerPx = region.latitudeDelta / mapLayout.height;
+          const [west, south, east, north] = mapBounds;
+          const lngPerPx = (east - west) / mapLayout.width;
+          const latPerPx = (north - south) / mapLayout.height;
           const next: LatLng = {
             latitude: anchor.coordinate.latitude - dy * latPerPx,
             longitude: anchor.coordinate.longitude + dx * lngPerPx,
@@ -142,12 +148,13 @@ export default function CreateFoldScreen() {
           freehandAnchor.current = null;
         },
       }),
-    [drawMode, region, mapLayout]
+    [drawMode, mapBounds, mapLayout]
   );
 
-  const handleMapPress = (event: MapPressEvent) => {
-    const coordinate = event.nativeEvent?.coordinate;
-    if (!coordinate) return;
+  const handleMapPress = (event: NativeSyntheticEvent<PressEvent>) => {
+    const lngLat = event.nativeEvent?.lngLat;
+    if (!lngLat) return;
+    const coordinate = fromLngLat(lngLat as LngLat);
 
     if (drawMode === 'polygon') {
       setPolygonPoints((points) => [...points, coordinate]);
@@ -181,6 +188,11 @@ export default function CreateFoldScreen() {
     setCircleRadius(DEFAULT_RADIUS_M);
   };
 
+  const undoLastPoint = () => {
+    setPolygonPoints((points) => points.slice(0, -1));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   const geometry: Geometry | null = useMemo(() => {
     if (drawMode === 'circle') {
       return circleCenter ? { type: 'circle', center: circleCenter, radiusMeters: circleRadius } : null;
@@ -206,6 +218,35 @@ export default function CreateFoldScreen() {
     }
     router.back();
   };
+
+  const polygonPreview = useMemo(() => {
+    if (drawMode === 'circle' || polygonPoints.length < 2) return null;
+    const geometry: GeoJSON.Geometry =
+      polygonPoints.length >= 3
+        ? { type: 'Polygon', coordinates: [pointsToLngLatRing(polygonPoints)] }
+        : { type: 'LineString', coordinates: polygonPoints.map(toLngLat) };
+    return {
+      type: 'FeatureCollection' as const,
+      features: [{ type: 'Feature' as const, properties: {}, geometry }],
+    };
+  }, [drawMode, polygonPoints]);
+
+  const circlePreview = useMemo(() => {
+    if (drawMode !== 'circle' || !circleCenter) return null;
+    return {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          properties: {},
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [pointsToLngLatRing(circlePolygonPoints(circleCenter, circleRadius))],
+          },
+        },
+      ],
+    };
+  }, [drawMode, circleCenter, circleRadius]);
 
   return (
     <View style={styles.container}>
@@ -242,59 +283,54 @@ export default function CreateFoldScreen() {
       {step === 2 && (
         <View style={styles.mapStep}>
           <View style={styles.mapWrapper} onLayout={handleMapLayout} {...panResponder.panHandlers}>
-            {mapsAvailable ? (
-              <ErrorBoundary
-                label="Create Fold map"
-                fallback={
-                  <View style={styles.mapFallback}>
-                    <MaterialIcons name="map" size={28} color="#4B5568" />
-                    <Text style={styles.mapFallbackText}>
-                      Map unavailable — check the Google Maps API key in app.json
-                    </Text>
-                  </View>
-                }>
-                <MapView
-                  ref={mapRef}
-                  style={StyleSheet.absoluteFill}
-                  provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-                  initialRegion={region}
-                  onRegionChangeComplete={setRegion}
-                  customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
-                  scrollEnabled={drawMode !== 'freehand'}
-                  zoomEnabled={drawMode !== 'freehand'}
-                  onPress={handleMapPress}>
-                  {drawMode !== 'circle' && polygonPoints.length > 0 && (
-                    <Polygon
-                      coordinates={polygonPoints}
-                      strokeColor={Prism.cyan}
-                      fillColor={`${Prism.cyan}22`}
-                      strokeWidth={2}
-                      lineDashPattern={drawMode === 'polygon' ? [6, 4] : undefined}
+            <ErrorBoundary
+              label="Create Fold map"
+              fallback={
+                <View style={styles.mapFallback}>
+                  <MaterialIcons name="map" size={28} color="#4B5568" />
+                  <Text style={styles.mapFallbackText}>Map failed to load — check your connection</Text>
+                </View>
+              }>
+              <MapLibreMap
+                ref={mapRef}
+                style={StyleSheet.absoluteFill}
+                mapStyle={BLUEPRINT_MAP_STYLE}
+                dragPan={drawMode !== 'freehand'}
+                touchZoom={drawMode !== 'freehand'}
+                onRegionDidChange={(event) => setMapBounds(event.nativeEvent.bounds)}
+                onPress={handleMapPress}>
+                <Camera ref={cameraRef} initialViewState={{ center: toLngLat(initialCenter), zoom: DEFAULT_ZOOM }} />
+
+                {polygonPreview && (
+                  <GeoJSONSource id="polygon-preview" data={polygonPreview}>
+                    <Layer type="fill" id="polygon-preview-fill" paint={{ 'fill-color': Prism.cyan, 'fill-opacity': 0.13 }} />
+                    <Layer
+                      type="line"
+                      id="polygon-preview-line"
+                      paint={{
+                        'line-color': Prism.cyan,
+                        'line-width': 2,
+                        ...(drawMode === 'polygon' ? { 'line-dasharray': [2, 1.5] } : {}),
+                      }}
                     />
-                  )}
-                  {drawMode === 'polygon' &&
-                    polygonPoints.map((point, index) => (
-                      <Marker key={index} coordinate={point} anchor={{ x: 0.5, y: 0.5 }}>
-                        <View style={styles.vertexMarker} />
-                      </Marker>
-                    ))}
-                  {drawMode === 'circle' && circleCenter && (
-                    <Circle
-                      center={circleCenter}
-                      radius={circleRadius}
-                      strokeColor={Prism.cyan}
-                      fillColor={`${Prism.cyan}22`}
-                      strokeWidth={2}
-                    />
-                  )}
-                </MapView>
-              </ErrorBoundary>
-            ) : (
-              <View style={styles.mapFallback}>
-                <MaterialIcons name="map" size={28} color="#4B5568" />
-                <Text style={styles.mapFallbackText}>Map unavailable — add a Google Maps API key in app.json</Text>
-              </View>
-            )}
+                  </GeoJSONSource>
+                )}
+
+                {drawMode === 'polygon' &&
+                  polygonPoints.map((point, index) => (
+                    <Marker key={index} id={`vertex-${index}`} lngLat={toLngLat(point)} anchor="center">
+                      <View style={styles.vertexMarker} />
+                    </Marker>
+                  ))}
+
+                {circlePreview && (
+                  <GeoJSONSource id="circle-preview" data={circlePreview}>
+                    <Layer type="fill" id="circle-preview-fill" paint={{ 'fill-color': Prism.cyan, 'fill-opacity': 0.13 }} />
+                    <Layer type="line" id="circle-preview-line" paint={{ 'line-color': Prism.cyan, 'line-width': 2 }} />
+                  </GeoJSONSource>
+                )}
+              </MapLibreMap>
+            </ErrorBoundary>
           </View>
 
           {drawMode === 'circle' && circleCenter && (
@@ -311,6 +347,13 @@ export default function CreateFoldScreen() {
                 <MaterialIcons name="add" size={20} color={Prism.ashPaper} />
               </Pressable>
             </View>
+          )}
+
+          {drawMode !== 'circle' && polygonPoints.length > 0 && (
+            <Pressable style={styles.undoButton} onPress={undoLastPoint}>
+              <MaterialIcons name="undo" size={18} color={Prism.ashPaper} />
+              <Text style={styles.undoButtonText}>Undo point</Text>
+            </Pressable>
           )}
 
           <View style={styles.mapControls}>
@@ -509,6 +552,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     minWidth: 40,
     textAlign: 'center',
+  },
+  undoButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(13,17,28,0.9)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  undoButtonText: {
+    ...PrismType.caption,
+    color: Prism.ashPaper,
+    fontWeight: '600',
   },
   mapControls: {
     position: 'absolute',

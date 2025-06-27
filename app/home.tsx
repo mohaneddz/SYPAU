@@ -1,9 +1,18 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
+import {
+  Camera,
+  type CameraRef,
+  GeoJSONSource,
+  Layer,
+  Map as MapLibreMap,
+  type MapRef,
+  type PressEventWithFeatures,
+  UserLocation,
+} from '@maplibre/maplibre-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Circle, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
+import { Pressable, StyleSheet, Text, View, type NativeSyntheticEvent } from 'react-native';
 
 import { ErrorBoundary } from '@/components/error-boundary';
 import { CommandRing } from '@/components/prism/command-ring';
@@ -13,25 +22,22 @@ import { EDGE_COLOR_HEX, Prism, PrismType } from '@/constants/prism';
 import { SETTINGS_KEYS } from '@/constants/settings-keys';
 import { getDb } from '@/db/client';
 import { getSetting } from '@/db/queries';
-import type { LatLng } from '@/engine/geo';
+import { circlePolygonPoints, type LatLng } from '@/engine/geo';
 import { useFieldEngine } from '@/hooks/use-field-engine';
 import { useEngineStore } from '@/state/use-engine-store';
 import { useFoldStore } from '@/state/use-fold-store';
-import { canRenderGoogleMaps } from '@/utils/maps-config';
+import { pointsToLngLatRing, toLngLat } from '@/utils/map-geo';
 
-const DEFAULT_REGION = {
-  latitude: 37.78825,
-  longitude: -122.4324,
-  latitudeDelta: 0.02,
-  longitudeDelta: 0.02,
-};
+const DEFAULT_CENTER: LatLng = { latitude: 37.78825, longitude: -122.4324 };
+const DEFAULT_ZOOM = 14;
+const FOCUSED_ZOOM = 16;
 
 const BREATHE_MIN_WIDTH = 1.5;
 const BREATHE_MAX_WIDTH = 4;
-const mapsAvailable = canRenderGoogleMaps();
 
 export default function HomeScreen() {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapRef>(null);
+  const cameraRef = useRef<CameraRef>(null);
   const folds = useFoldStore((state) => state.folds);
 
   const [permissionStatus, setPermissionStatus] = useState<Location.PermissionStatus | null>(null);
@@ -57,7 +63,7 @@ export default function HomeScreen() {
         const coords = { latitude: initial.coords.latitude, longitude: initial.coords.longitude };
         setCurrentLocation(coords);
         setAccuracy(initial.coords.accuracy ?? null);
-        mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 500);
+        cameraRef.current?.easeTo({ center: toLngLat(coords), zoom: FOCUSED_ZOOM, duration: 500 });
       } catch {
         // No fix yet — watchPositionAsync below will pick it up once available.
       }
@@ -111,6 +117,64 @@ export default function HomeScreen() {
 
   useFieldEngine(currentLocation, folds);
 
+  const foldsFeatureCollection = useMemo(
+    () => ({
+      type: 'FeatureCollection' as const,
+      features: folds.map((fold) => {
+        const isActive = fold.id === resolvedFold?.id;
+        const strokeColor = EDGE_COLOR_HEX[fold.edgeColor];
+        const ring =
+          fold.geometry.type === 'circle'
+            ? circlePolygonPoints(fold.geometry.center, fold.geometry.radiusMeters)
+            : fold.geometry.points;
+        return {
+          type: 'Feature' as const,
+          id: fold.id,
+          properties: {
+            foldId: fold.id,
+            strokeColor,
+            fillColor: `${strokeColor}33`,
+            strokeWidth: isActive ? breatheWidth : 1.5,
+          },
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [pointsToLngLatRing(ring)],
+          },
+        };
+      }),
+    }),
+    [folds, resolvedFold, breatheWidth]
+  );
+
+  const debugFeatureCollection = useMemo(() => {
+    if (!showGpsDebug || !currentLocation || accuracy == null) return null;
+    return {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          properties: {},
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [pointsToLngLatRing(circlePolygonPoints(currentLocation, accuracy))],
+          },
+        },
+      ],
+    };
+  }, [showGpsDebug, currentLocation, accuracy]);
+
+  const handleFoldPress = useCallback((event: NativeSyntheticEvent<PressEventWithFeatures>) => {
+    const foldId = event.nativeEvent.features?.[0]?.properties?.foldId;
+    if (typeof foldId === 'string') {
+      router.push({ pathname: '/fold/[id]', params: { id: foldId } });
+    }
+  }, []);
+
+  const recenter = useCallback(() => {
+    if (!currentLocation) return;
+    cameraRef.current?.easeTo({ center: toLngLat(currentLocation), zoom: FOCUSED_ZOOM, duration: 500 });
+  }, [currentLocation]);
+
   if (permissionStatus && permissionStatus !== Location.PermissionStatus.GRANTED) {
     return (
       <View style={styles.permissionContainer}>
@@ -132,72 +196,47 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {mapsAvailable ? (
-        <ErrorBoundary
-          label="Home map"
-          fallback={
-            <View style={styles.mapFallback}>
-              <MaterialIcons name="map" size={28} color="#4B5568" />
-              <Text style={styles.mapFallbackText}>Map unavailable — check the Google Maps API key in app.json</Text>
-            </View>
-          }>
-          <MapView
-            ref={mapRef}
-            style={StyleSheet.absoluteFill}
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-            initialRegion={
-              currentLocation ? { ...currentLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 } : DEFAULT_REGION
-            }
-            customMapStyle={Platform.OS === 'android' ? BLUEPRINT_MAP_STYLE : undefined}
-            showsUserLocation>
-            {folds.map((fold) => {
-              const isActive = fold.id === resolvedFold?.id;
-              const strokeColor = EDGE_COLOR_HEX[fold.edgeColor];
-              const strokeWidth = isActive ? breatheWidth : 1.5;
-              const onPress = () => router.push({ pathname: '/fold/[id]', params: { id: fold.id } });
+      <ErrorBoundary
+        label="Home map"
+        fallback={
+          <View style={styles.mapFallback}>
+            <MaterialIcons name="map" size={28} color="#4B5568" />
+            <Text style={styles.mapFallbackText}>Map failed to load — check your connection</Text>
+          </View>
+        }>
+        <MapLibreMap ref={mapRef} style={StyleSheet.absoluteFill} mapStyle={BLUEPRINT_MAP_STYLE}>
+          <Camera
+            ref={cameraRef}
+            initialViewState={{ center: toLngLat(currentLocation ?? DEFAULT_CENTER), zoom: DEFAULT_ZOOM }}
+          />
+          <UserLocation animated accuracy={false} />
 
-              if (fold.geometry.type === 'circle') {
-                // MapCircle has no onPress — reachable via My Fields instead.
-                return (
-                  <Circle
-                    key={fold.id}
-                    center={fold.geometry.center}
-                    radius={fold.geometry.radiusMeters}
-                    strokeColor={strokeColor}
-                    fillColor={`${strokeColor}33`}
-                    strokeWidth={strokeWidth}
-                  />
-                );
-              }
-              return (
-                <Polygon
-                  key={fold.id}
-                  coordinates={fold.geometry.points}
-                  strokeColor={strokeColor}
-                  fillColor={`${strokeColor}33`}
-                  strokeWidth={strokeWidth}
-                  tappable
-                  onPress={onPress}
-                />
-              );
-            })}
+          <GeoJSONSource id="folds" data={foldsFeatureCollection} onPress={handleFoldPress}>
+            <Layer type="fill" id="folds-fill" paint={{ 'fill-color': ['get', 'fillColor'] }} />
+            <Layer
+              type="line"
+              id="folds-line"
+              paint={{ 'line-color': ['get', 'strokeColor'], 'line-width': ['get', 'strokeWidth'] }}
+            />
+          </GeoJSONSource>
 
-            {showGpsDebug && currentLocation && accuracy != null && (
-              <Circle
-                center={currentLocation}
-                radius={accuracy}
-                strokeColor={Prism.violet}
-                fillColor={`${Prism.violet}22`}
-                strokeWidth={1}
+          {debugFeatureCollection && (
+            <GeoJSONSource id="gps-debug" data={debugFeatureCollection}>
+              <Layer
+                type="line"
+                id="gps-debug-line"
+                paint={{ 'line-color': Prism.violet, 'line-width': 1 }}
               />
-            )}
-          </MapView>
-        </ErrorBoundary>
-      ) : (
-        <View style={styles.mapFallback}>
-          <MaterialIcons name="map" size={28} color="#4B5568" />
-          <Text style={styles.mapFallbackText}>Map unavailable — add a Google Maps API key in app.json</Text>
-        </View>
+              <Layer type="fill" id="gps-debug-fill" paint={{ 'fill-color': Prism.violet, 'fill-opacity': 0.13 }} />
+            </GeoJSONSource>
+          )}
+        </MapLibreMap>
+      </ErrorBoundary>
+
+      {currentLocation && (
+        <Pressable style={styles.recenterButton} onPress={recenter}>
+          <MaterialIcons name="my-location" size={20} color={Prism.ashPaper} />
+        </Pressable>
       )}
 
       {showGpsDebug && currentLocation && (
@@ -292,6 +331,19 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     backgroundColor: 'rgba(13,17,28,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recenterButton: {
+    position: 'absolute',
+    bottom: 130,
+    right: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(13,17,28,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },

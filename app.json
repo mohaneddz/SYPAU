@@ -32,12 +32,7 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
         "POST_NOTIFICATIONS"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": ""
-        }
-      }
+      ]
     },
     "web": {
       "output": "static",
@@ -72,7 +67,8 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#34F6D3"
         }
-      ]
+      ],
+      "@maplibre/maplibre-react-native"
     ],
     "experiments": {
       "typedRoutes": true,
