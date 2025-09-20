@@ -121,6 +121,26 @@ export function geometryArea(geometry: Geometry): number {
   return polygonArea(geometry.points);
 }
 
+/**
+ * Approximates a circle as a polygon ring of `steps` points, for rendering on
+ * map layers that only draw polygons/lines (no native meter-radius circle).
+ */
+export function circlePolygonPoints(center: LatLng, radiusMeters: number, steps = 64): LatLng[] {
+  const latRad = toRadians(center.latitude);
+  const metersPerDegLat = 111320;
+  const metersPerDegLng = 111320 * Math.cos(latRad);
+
+  const points: LatLng[] = [];
+  for (let i = 0; i < steps; i++) {
+    const theta = (i / steps) * 2 * Math.PI;
+    points.push({
+      latitude: center.latitude + (radiusMeters * Math.sin(theta)) / metersPerDegLat,
+      longitude: center.longitude + (radiusMeters * Math.cos(theta)) / metersPerDegLng,
+    });
+  }
+  return points;
+}
+
 /** Rough planar area of a polygon in square meters (shoelace formula with local meter conversion). */
 export function polygonArea(polygon: LatLng[]): number {
   if (polygon.length < 3) return 0;
