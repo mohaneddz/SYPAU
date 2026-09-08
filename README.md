@@ -1,3 +1,5 @@
+![SYPAU](screenshots/cover.avif)
+
 # SYPAU
 
 **SYPAU** ("Shut Your Phone Alarm Up," working name "Silence Origami") is an Android-focused geofencing app built with Expo, React Native, and TypeScript. Draw zones called **Folds** on a map, assign each one an alarm **Profile**, and SYPAU automatically goes gentle (vibrate/low volume) on your alarms and notifications while you're inside a Fold — then restores normal behavior when you leave.
