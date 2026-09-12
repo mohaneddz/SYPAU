@@ -19,7 +19,7 @@ SYPAU is a React Native mobile application built with Expo that lets users creat
 
 - **Framework**: React Native with Expo
 - **Language**: TypeScript
-- **Navigation**: React Navigation (bottom tabs)
+- **Navigation**: Expo Router (file-based), with a custom "Command Ring" in place of a bottom tab bar
 - **Mapping**: MapLibre React Native
 - **Storage**: Expo SQLite (local database)
 - **Location**: Expo Location with background task support
@@ -43,9 +43,6 @@ SYPAU is a React Native mobile application built with Expo that lets users creat
 ### Installation
 
 ```bash
-# Install dependencies
-npm install
-# or
 pnpm install
 ```
 
@@ -53,22 +50,22 @@ pnpm install
 
 ```bash
 # Start development server
-npm run start
+pnpm start
 
 # Run on Android
-npm run android
+pnpm android
 
 # Run on iOS
-npm run ios
+pnpm ios
 
 # Run on web
-npm run web
+pnpm web
 ```
 
 ### Linting
 
 ```bash
-npm run lint
+pnpm lint
 ```
 
 ## App Identity

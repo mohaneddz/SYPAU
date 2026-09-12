@@ -27,8 +27,7 @@ Active development, Android-focused. Map + geofencing MVP, the Field Engine, bac
 Not yet implemented, by design of the current Expo-managed build:
 - Forcing system Do Not Disturb or changing system ringer/alarm volume
 - True native geofencing APIs (would need a custom dev client / native modules)
-
-A map-config refactor (moving from `utils/maps-config.ts` to `constants/map-style.json` + `utils/map-geo.ts`) is in progress and not yet committed.
+- Alarms don't actually ring under Expo Go — the Alarms screen says so; build a dev client (`npx expo run:android`) to test them firing
 
 ## Getting started
 
