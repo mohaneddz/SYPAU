@@ -58,9 +58,10 @@ export type SypauIconName =
   | 'refresh'
   | 'lock';
 
-type Glyph = { set: 'feather' | 'material'; name: string };
+export type Glyph = { set: 'feather' | 'material'; name: string };
 
-const GLYPHS: Record<SypauIconName, Glyph> = {
+/** Exported so the suite can check every name against the real font. */
+export const GLYPHS: Record<SypauIconName, Glyph> = {
   home: { set: 'feather', name: 'home' },
   school: { set: 'material', name: 'school-outline' },
   book: { set: 'feather', name: 'book-open' },
@@ -95,7 +96,7 @@ const GLYPHS: Record<SypauIconName, Glyph> = {
   volume: { set: 'feather', name: 'volume-2' },
   volumeOff: { set: 'feather', name: 'volume-x' },
   vibrate: { set: 'material', name: 'vibrate' },
-  dnd: { set: 'material', name: 'do-not-disturb' },
+  dnd: { set: 'material', name: 'bell-cancel-outline' },
   wifi: { set: 'feather', name: 'wifi' },
   bluetooth: { set: 'feather', name: 'bluetooth' },
   signal: { set: 'material', name: 'signal' },
