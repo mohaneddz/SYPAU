@@ -91,10 +91,10 @@ export function DarkCard({ children, onPress, highlighted = false, style }: Dark
 }
 
 const styles = StyleSheet.create({
-  paperWrap: {
-    // Room for the tears, which overhang the body top and bottom.
-    paddingVertical: 8,
-  },
+  // No padding here on purpose: the tears are drawn *over* the paper's own
+  // top and bottom edges, so an inset would leave them painting on the page
+  // background instead, where they're invisible.
+  paperWrap: {},
   paperBody: {
     backgroundColor: SypauColor.paper,
     overflow: 'hidden',
