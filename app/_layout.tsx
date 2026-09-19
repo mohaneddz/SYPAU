@@ -10,7 +10,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
@@ -48,25 +48,28 @@ export default function RootLayout() {
 
   const fontsLoaded = antonLoaded && oswaldLoaded && interLoaded && caveatLoaded;
 
+  // Startup runs in an effect, where the error boundary can't reach it. A
+  // failure here means no database, so it's surfaced rather than left to
+  // present as an app that opens to nothing.
   const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
-    getDb();
-    seedStarterProfiles();
+      getDb();
+      seedStarterProfiles();
 
-    useSettingsStore.getState().hydrate();
-    useProfileStore.getState().load();
-    useZoneStore.getState().load();
-    useActivityStore.getState().load();
-    void setupNotificationHandler();
+      useSettingsStore.getState().hydrate();
+      useProfileStore.getState().load();
+      useZoneStore.getState().load();
+      useActivityStore.getState().load();
+      void setupNotificationHandler();
 
-    // Retention trim on launch rather than on a timer: the log only grows
-    // while the app is alive, so this is the moment it can have drifted.
-    const { logRetentionDays } = useSettingsStore.getState().settings;
-    pruneEvents(logRetentionDays);
-    } catch (e) {
-      setInitError(e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      // Retention trim on launch rather than on a timer: the log only grows
+      // while the app is alive, so this is the moment it can have drifted.
+      const { logRetentionDays } = useSettingsStore.getState().settings;
+      pruneEvents(logRetentionDays);
+    } catch (error) {
+      setInitError(error instanceof Error ? error.message : String(error));
     }
   }, []);
 
@@ -74,15 +77,10 @@ export default function RootLayout() {
     if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
 
+  if (initError) return <StartupFailure message={initError} />;
+
   // The identity is carried by the type, so holding here avoids a flash of
   // system-font headings before the real faces land.
-  if (initError) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#300', padding: 40, justifyContent: 'center' }}>
-        <Text style={{ color: '#fff', fontSize: 16 }}>INIT ERROR: {initError}</Text>
-      </View>
-    );
-  }
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: SypauColor.ink }} />;
 
   return (
@@ -118,3 +116,34 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+/**
+ * Shown when startup itself failed. Deliberately plain: it must render without
+ * the fonts, database or stores the rest of the app assumes, because any of
+ * those is what has just gone wrong.
+ */
+function StartupFailure({ message }: { message: string }) {
+  return (
+    <View style={styles.failure}>
+      <Text style={styles.failureTitle}>SYPAU COULDN&rsquo;T START</Text>
+      <Text style={styles.failureBody}>
+        Something went wrong setting up local storage, so your zones and profiles
+        couldn&rsquo;t be loaded.
+      </Text>
+      <Text style={styles.failureDetail}>{message}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  failure: {
+    flex: 1,
+    backgroundColor: SypauColor.ink,
+    padding: 32,
+    justifyContent: 'center',
+    gap: 14,
+  },
+  failureTitle: { color: SypauColor.red, fontSize: 22, letterSpacing: 1 },
+  failureBody: { color: SypauColor.bone, fontSize: 15, lineHeight: 22 },
+  failureDetail: { color: SypauColor.boneFaint, fontSize: 13 },
+});
