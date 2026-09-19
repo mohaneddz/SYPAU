@@ -256,17 +256,19 @@ export default function DebugRoute() {
                   },
                 ]}
               />
-              <SypauText
-                variant="bodySm"
-                style={styles.flex}
-                color={line.severity === 'error' ? SypauColor.red : SypauColor.bone}>
-                {line.message}
-              </SypauText>
-              {line.detail ? (
-                <SypauText variant="bodySm" color={SypauColor.boneFaint}>
-                  {line.detail}
+              <View style={styles.flex}>
+                <SypauText
+                  variant="bodySm"
+                  numberOfLines={2}
+                  color={line.severity === 'error' ? SypauColor.red : SypauColor.bone}>
+                  {line.message}
                 </SypauText>
-              ) : null}
+                {line.detail ? (
+                  <SypauText variant="bodySm" numberOfLines={1} color={SypauColor.boneFaint}>
+                    {line.detail}
+                  </SypauText>
+                ) : null}
+              </View>
             </View>
           ))
         )}
@@ -283,11 +285,13 @@ export default function DebugRoute() {
                   size={14}
                   color={result.passed ? SypauColor.green : SypauColor.amber}
                 />
-                <SypauText variant="bodySm" style={styles.flex}>
+                <SypauText variant="bodySm" style={styles.flex} numberOfLines={1}>
                   {result.label}
                 </SypauText>
                 <SypauText
                   variant="bodySm"
+                  numberOfLines={1}
+                  style={styles.resultDetail}
                   color={result.passed ? SypauColor.green : SypauColor.amber}>
                   {result.detail}
                 </SypauText>
@@ -394,13 +398,17 @@ const styles = StyleSheet.create({
     gap: SypauSpace.md,
   },
 
+  // Align to the top: a wrapped message shouldn't drag the timestamp and dot
+  // down to the middle of the row.
   logRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: SypauSpace.sm,
     paddingVertical: SypauSpace.xs,
   },
-  logDot: { width: 7, height: 7, borderRadius: 4 },
+  logDot: { width: 7, height: 7, borderRadius: 4, marginTop: 6 },
+  // Capped so a long status can't squeeze the label out of the row.
+  resultDetail: { maxWidth: '45%', textAlign: 'right' },
 
   actions: { flexDirection: 'row', gap: SypauSpace.md },
 });
