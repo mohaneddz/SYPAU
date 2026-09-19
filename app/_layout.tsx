@@ -16,6 +16,7 @@ import 'react-native-reanimated';
 
 import { ErrorBoundary } from '@/components/errorBoundary';
 import { SypauColor } from '@/constants/sypau';
+import { setupNotificationHandler } from '@/core/notify';
 import { getDb } from '@/db/client';
 import { pruneEvents } from '@/db/events';
 import { seedStarterProfiles } from '@/db/profiles';
@@ -55,6 +56,7 @@ export default function RootLayout() {
     useProfileStore.getState().load();
     useZoneStore.getState().load();
     useActivityStore.getState().load();
+    void setupNotificationHandler();
 
     // Retention trim on launch rather than on a timer: the log only grows
     // while the app is alive, so this is the moment it can have drifted.

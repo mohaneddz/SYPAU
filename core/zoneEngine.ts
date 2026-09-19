@@ -1,3 +1,4 @@
+import { notify } from '@/core/notify';
 import { logEvent } from '@/db/events';
 import { markZoneEntered, markZoneExited } from '@/db/zones';
 import { distanceToGeometry, type LatLng } from '@/engine/geo';
@@ -236,6 +237,15 @@ export function applyTransition(input: TransitionInput): EngineState {
     logApplyProblems(summary, settings, activeZone.id, profile.id);
     updateMonitoringNotification(activeZone.name);
 
+    if (settings.notifyOnProfileChange) {
+      void notify(
+        `${profile.name} activated`,
+        hasProblems(summary)
+          ? `You're in ${activeZone.name}. Some of it needs you — check Activity.`
+          : `You're in ${activeZone.name}. Silence is in control.`
+      );
+    }
+
     return {
       ...outcome.state,
       snapshot: heldSnapshot,
@@ -333,6 +343,10 @@ function releaseToFallback(args: {
   }
 
   updateMonitoringNotification(null);
+
+  if (settings.notifyOnProfileChange) {
+    void notify('Previous state restored', 'You left your zone. Your phone is yours again.');
+  }
 
   return { ...state, snapshot: null, ownedKeys: [], activeSince: null };
 }

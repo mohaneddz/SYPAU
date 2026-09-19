@@ -1,5 +1,4 @@
 import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
@@ -12,6 +11,7 @@ import { Display, SectionTitle, SypauText } from '@/components/sypau/text';
 import { openSettings } from '@/core/nativeBridge';
 import { SypauColor, SypauSpace } from '@/constants/sypau';
 import { useEngineStore } from '@/state/useEngineStore';
+import { getNotifications } from '@/utils/notifications';
 
 type PermissionsRouteProps = {
   /** Embedded under Settings, where the "continue" CTA doesn't belong. */
@@ -67,7 +67,9 @@ export function PermissionsScreen({ embedded = false }: PermissionsRouteProps) {
   const requestNotifications = useCallback(async () => {
     setRequesting(true);
     try {
-      await Notifications.requestPermissionsAsync();
+      // Loaded lazily: a static import throws inside Expo Go.
+      const Notifications = await getNotifications();
+      await Notifications?.requestPermissionsAsync();
     } finally {
       setRequesting(false);
       refresh();

@@ -30,6 +30,13 @@ jest.mock('@/core/nativeBridge', () => {
   };
 });
 
+// Loading this for real pulls in expo-notifications, which has module-scope
+// side effects that take the worker down.
+jest.mock('@/core/notify', () => ({
+  notify: jest.fn(),
+  setupNotificationHandler: jest.fn(),
+}));
+
 jest.mock('@/db/events', () => ({
   logEvent: jest.fn(),
   logEvents: jest.fn(),
