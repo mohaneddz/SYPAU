@@ -1,0 +1,76 @@
+import type * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+
+import { LOCATION_TASK_NAME } from '@/core/monitoring';
+import { applyTransition, INITIAL_ENGINE_STATE, resolveActiveZone, type EngineState } from '@/core/zoneEngine';
+import { loadSettings } from '@/db/settings';
+import { listProfiles } from '@/db/profiles';
+import { getZone, listZones } from '@/db/zones';
+
+/**
+ * Background location handler.
+ *
+ * Defined at module scope so it survives the cold start Android performs when
+ * it wakes the app for a location update — a task registered inside a
+ * component would not exist yet at that point.
+ *
+ * Engine state lives in module scope for the same reason: the process may be
+ * torn down between updates, in which case we rebuild from the database and
+ * the current position rather than assuming continuity.
+ */
+let backgroundState: EngineState = INITIAL_ENGINE_STATE;
+let backgroundDwell: Record<string, number> = {};
+
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) return;
+
+  const { locations } = (data ?? {}) as { locations?: Location.LocationObject[] };
+  const latest = locations?.[locations.length - 1];
+  if (!latest) return;
+
+  try {
+    const settings = loadSettings();
+    if (!settings.automationEnabled) return;
+
+    const zones = listZones();
+    const profiles = listProfiles();
+    const position = {
+      latitude: latest.coords.latitude,
+      longitude: latest.coords.longitude,
+    };
+
+    const previousActiveZone = backgroundState.activeZoneId
+      ? getZone(backgroundState.activeZoneId)
+      : null;
+
+    const outcome = resolveActiveZone({
+      position,
+      zones,
+      profiles,
+      settings,
+      state: backgroundState,
+      dwellSince: backgroundDwell,
+    });
+
+    backgroundDwell = outcome.dwellSince;
+    backgroundState = applyTransition({
+      outcome,
+      previousActiveZone,
+      profiles,
+      settings,
+      state: backgroundState,
+    });
+  } catch {
+    // A throw here would have Android treat the task as misbehaving and back
+    // off from waking us; losing one update is the lesser cost.
+  }
+});
+
+/** Lets the foreground hand its current state to the background task. */
+export function seedBackgroundState(state: EngineState): void {
+  backgroundState = state;
+}
+
+export function getBackgroundState(): EngineState {
+  return backgroundState;
+}

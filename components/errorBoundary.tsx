@@ -1,7 +1,7 @@
 import { Component, type PropsWithChildren, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Prism, PrismType } from '@/constants/prism';
+import { SypauColor, SypauType } from '@/constants/sypau';
 
 type Props = PropsWithChildren<{ label?: string; fallback?: ReactNode }>;
 type State = { error: Error | null };
@@ -39,30 +39,31 @@ export class ErrorBoundary extends Component<Props, State> {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Prism.inkBlack,
+    backgroundColor: SypauColor.ink,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
     gap: 14,
   },
   title: {
-    ...PrismType.h2,
-    color: Prism.ashPaper,
+    ...SypauType.cardTitle,
+    color: SypauColor.bone,
   },
   message: {
-    ...PrismType.body,
-    color: '#9AA3B2',
+    ...SypauType.body,
+    color: SypauColor.boneMuted,
     textAlign: 'center',
   },
   button: {
     marginTop: 8,
-    backgroundColor: Prism.cyan,
+    backgroundColor: SypauColor.red,
     paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 18,
+    borderRadius: 8,
   },
   buttonText: {
-    color: Prism.inkBlack,
-    fontWeight: '700',
+    ...SypauType.label,
+    color: SypauColor.bone,
+    textTransform: 'uppercase',
   },
 });
