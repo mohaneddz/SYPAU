@@ -1,9 +1,16 @@
-import MapLibreGL from '@maplibre/maplibre-react-native';
-import { useMemo, type ReactNode } from 'react';
+import {
+  Camera,
+  GeoJSONSource,
+  Layer,
+  Map,
+  Marker,
+  type CameraRef,
+} from '@maplibre/maplibre-react-native';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { SypauColor } from '@/constants/sypau';
 import { SYPAU_MAP_STYLE } from '@/constants/map-style';
+import { SypauColor } from '@/constants/sypau';
 import { circlePolygonPoints, type Geometry, type LatLng } from '@/engine/geo';
 import { pointsToLngLatRing, toLngLat } from '@/utils/map-geo';
 
@@ -37,12 +44,12 @@ type BoundaryProps = {
 
 /** A zone boundary: cyan fill with a brighter stroke, per the references. */
 export function ZoneBoundary({ id, geometry, muted = false }: BoundaryProps) {
-  const shape = useMemo(
+  const data = useMemo<GeoJSON.Feature>(
     () => ({
-      type: 'Feature' as const,
+      type: 'Feature',
       properties: {},
       geometry: {
-        type: 'Polygon' as const,
+        type: 'Polygon',
         coordinates: [pointsToLngLatRing(geometryToRing(geometry))],
       },
     }),
@@ -50,25 +57,32 @@ export function ZoneBoundary({ id, geometry, muted = false }: BoundaryProps) {
   );
 
   return (
-    <MapLibreGL.ShapeSource id={`boundary-${id}`} shape={shape}>
-      <MapLibreGL.FillLayer
-        id={`boundaryFill-${id}`}
-        style={{ fillColor: SypauColor.cyan, fillOpacity: muted ? 0.1 : 0.28 }}
+    <GeoJSONSource id={`boundary${id}`} data={data}>
+      <Layer
+        id={`boundaryFill${id}`}
+        type="fill"
+        paint={{ 'fill-color': SypauColor.cyan, 'fill-opacity': muted ? 0.1 : 0.28 }}
       />
-      <MapLibreGL.LineLayer
-        id={`boundaryLine-${id}`}
-        style={{
-          lineColor: SypauColor.cyan,
-          lineWidth: 2,
-          lineOpacity: muted ? 0.4 : 1,
+      <Layer
+        id={`boundaryLine${id}`}
+        type="line"
+        paint={{
+          'line-color': SypauColor.cyan,
+          'line-width': 2,
+          'line-opacity': muted ? 0.4 : 1,
         }}
       />
-    </MapLibreGL.ShapeSource>
+    </GeoJSONSource>
   );
 }
 
+export type ZoneMapHandle = {
+  flyTo: (point: LatLng, zoom?: number) => void;
+  zoomBy: (delta: number) => void;
+};
+
 type ZoneMapProps = {
-  /** Zones to draw. The first one frames the camera when no centre is given. */
+  /** Zones to draw. The first frames the camera when no centre is given. */
   geometries?: { id: string; geometry: Geometry; muted?: boolean }[];
   center?: LatLng | null;
   zoom?: number;
@@ -76,6 +90,8 @@ type ZoneMapProps = {
   /** Off for thumbnails and previews. */
   interactive?: boolean;
   onPress?: (point: LatLng) => void;
+  /** Kept in a ref so the map isn't re-rendered just to recentre it. */
+  controlRef?: React.MutableRefObject<ZoneMapHandle | null>;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
 };
@@ -91,39 +107,63 @@ export function ZoneMap({
   userLocation,
   interactive = true,
   onPress,
+  controlRef,
   style,
   children,
 }: ZoneMapProps) {
+  const cameraRef = useRef<CameraRef>(null);
+  const zoomRef = useRef(zoom);
+
   const cameraCenter =
     center ?? (geometries[0] ? geometryCenter(geometries[0].geometry) : null) ?? userLocation;
 
+  useEffect(() => {
+    if (!controlRef) return;
+
+    controlRef.current = {
+      flyTo: (point, nextZoom) => {
+        zoomRef.current = nextZoom ?? zoomRef.current;
+        cameraRef.current?.flyTo({
+          center: toLngLat(point),
+          zoom: zoomRef.current,
+          duration: 700,
+        });
+      },
+      zoomBy: (delta) => {
+        zoomRef.current = Math.min(20, Math.max(2, zoomRef.current + delta));
+        cameraRef.current?.zoomTo(zoomRef.current, { duration: 250 });
+      },
+    };
+  }, [controlRef]);
+
   return (
     <View style={[styles.map, style]}>
-      <MapLibreGL.MapView
+      <Map
         style={StyleSheet.absoluteFill}
         mapStyle={SYPAU_MAP_STYLE}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled={false}
-        scrollEnabled={interactive}
-        zoomEnabled={interactive}
-        rotateEnabled={false}
-        pitchEnabled={false}
+        logo={false}
+        attribution={false}
+        compass={false}
+        scaleBar={false}
+        dragPan={interactive}
+        touchZoom={interactive}
+        doubleTapZoom={interactive}
+        touchRotate={false}
+        touchPitch={false}
         onPress={
           onPress
-            ? (feature) => {
-                const coords = (feature.geometry as { coordinates: [number, number] }).coordinates;
-                onPress({ longitude: coords[0], latitude: coords[1] });
+            ? (event) => {
+                const [longitude, latitude] = event.nativeEvent.lngLat;
+                onPress({ latitude, longitude });
               }
             : undefined
         }>
-        {cameraCenter ? (
-          <MapLibreGL.Camera
-            zoomLevel={zoom}
-            centerCoordinate={toLngLat(cameraCenter)}
-            animationDuration={interactive ? 600 : 0}
-          />
-        ) : null}
+        <Camera
+          ref={cameraRef}
+          initialViewState={
+            cameraCenter ? { center: toLngLat(cameraCenter), zoom } : { zoom }
+          }
+        />
 
         {geometries.map((entry) => (
           <ZoneBoundary
@@ -137,7 +177,7 @@ export function ZoneMap({
         {userLocation ? <UserMarker point={userLocation} /> : null}
 
         {children}
-      </MapLibreGL.MapView>
+      </Map>
     </View>
   );
 }
@@ -145,20 +185,31 @@ export function ZoneMap({
 /** Live position: a cyan dot with a soft halo, as in the debug reference. */
 export function UserMarker({ point }: { point: LatLng }) {
   return (
-    <MapLibreGL.MarkerView coordinate={toLngLat(point)} anchor={{ x: 0.5, y: 0.5 }}>
+    <Marker lngLat={toLngLat(point)} anchor="center">
       <View style={styles.userHalo}>
         <View style={styles.userDot} />
       </View>
-    </MapLibreGL.MarkerView>
+    </Marker>
   );
 }
 
-/** Draggable vertex handle used by the boundary editor. */
-export function VertexHandle({ point, onPress }: { point: LatLng; onPress?: () => void }) {
+/** Editable vertex handle used by the boundary editor. */
+export function VertexHandle({
+  point,
+  selected = false,
+  onPress,
+}: {
+  point: LatLng;
+  selected?: boolean;
+  onPress?: () => void;
+}) {
   return (
-    <MapLibreGL.MarkerView coordinate={toLngLat(point)} anchor={{ x: 0.5, y: 0.5 }}>
-      <View style={styles.vertex} onTouchEnd={onPress} />
-    </MapLibreGL.MarkerView>
+    <Marker lngLat={toLngLat(point)} anchor="center">
+      <View
+        onTouchEnd={onPress}
+        style={[styles.vertex, selected && styles.vertexSelected]}
+      />
+    </Marker>
   );
 }
 
@@ -187,5 +238,9 @@ const styles = StyleSheet.create({
     backgroundColor: SypauColor.paper,
     borderWidth: 2.5,
     borderColor: SypauColor.cyan,
+  },
+  vertexSelected: {
+    borderColor: SypauColor.red,
+    transform: [{ scale: 1.25 }],
   },
 });
