@@ -1,80 +1,105 @@
+import {
+  Anton_400Regular,
+  useFonts as useAnton,
+} from '@expo-google-fonts/anton';
+import { Caveat_700Bold, useFonts as useCaveat } from '@expo-google-fonts/caveat';
+import { Inter_400Regular, Inter_500Medium, Inter_700Bold, useFonts as useInter } from '@expo-google-fonts/inter';
+import { Oswald_500Medium, Oswald_600SemiBold, useFonts as useOswald } from '@expo-google-fonts/oswald';
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
-import { router, Stack } from 'expo-router';
-import { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-import { ErrorBoundary } from '@/components/error-boundary';
+import { ErrorBoundary } from '@/components/errorBoundary';
+import { SypauColor } from '@/constants/sypau';
 import { getDb } from '@/db/client';
-import { Prism } from '@/constants/prism';
-import { useAlarmStore } from '@/state/use-alarm-store';
-import { useFoldStore } from '@/state/use-fold-store';
-import { useProfileStore } from '@/state/use-profile-store';
-import { setupNotificationHandler } from '@/tasks/notification-handler';
-import { getNotifications } from '@/utils/notifications';
-import '@/tasks/location-task';
+import { pruneEvents } from '@/db/events';
+import { seedStarterProfiles } from '@/db/profiles';
+import { useActivityStore } from '@/state/useActivityStore';
+import { useProfileStore } from '@/state/useProfileStore';
+import { useSettingsStore } from '@/state/useSettingsStore';
+import { useZoneStore } from '@/state/useZoneStore';
+import '@/tasks/locationTask';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const navTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: Prism.inkBlack,
-    card: Prism.deepCharcoal,
-    text: Prism.ashPaper,
-    border: 'rgba(233,236,242,0.08)',
-    primary: Prism.cyan,
+    background: SypauColor.ink,
+    card: SypauColor.surface,
+    text: SypauColor.bone,
+    border: SypauColor.hairline,
+    primary: SypauColor.red,
   },
 };
 
 export default function RootLayout() {
+  const [antonLoaded] = useAnton({ Anton_400Regular });
+  const [oswaldLoaded] = useOswald({ Oswald_500Medium, Oswald_600SemiBold });
+  const [interLoaded] = useInter({ Inter_400Regular, Inter_500Medium, Inter_700Bold });
+  const [caveatLoaded] = useCaveat({ Caveat_700Bold });
+
+  const fontsLoaded = antonLoaded && oswaldLoaded && interLoaded && caveatLoaded;
+
   useEffect(() => {
     getDb();
-    useProfileStore.getState().load();
-    useFoldStore.getState().load();
-    useAlarmStore.getState().load();
-    setupNotificationHandler();
+    seedStarterProfiles();
 
-    let subscription: { remove: () => void } | null = null;
-    (async () => {
-      const Notifications = await getNotifications();
-      if (!Notifications) return;
-      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-        const alarmId = response.notification.request.content.data?.alarmId;
-        if (typeof alarmId === 'string') {
-          router.push({ pathname: '/alarm-ringing', params: { alarmId } });
-        }
-      });
-    })();
-    return () => subscription?.remove();
+    useSettingsStore.getState().hydrate();
+    useProfileStore.getState().load();
+    useZoneStore.getState().load();
+    useActivityStore.getState().load();
+
+    // Retention trim on launch rather than on a timer: the log only grows
+    // while the app is alive, so this is the moment it can have drifted.
+    const { logRetentionDays } = useSettingsStore.getState().settings;
+    pruneEvents(logRetentionDays);
   }, []);
 
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded]);
+
+  // The identity is carried by the type, so holding here avoids a flash of
+  // system-font headings before the real faces land.
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: SypauColor.ink }} />;
+
   return (
-    <ThemeProvider value={navTheme}>
-      <ErrorBoundary label="RootLayout">
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: Prism.deepCharcoal },
-            headerTintColor: Prism.ashPaper,
-            headerTitleStyle: { fontWeight: '700' },
-            contentStyle: { backgroundColor: Prism.inkBlack },
-          }}>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-          <Stack.Screen name="home" options={{ headerShown: false }} />
-          <Stack.Screen name="fields" options={{ title: 'My Fields' }} />
-          <Stack.Screen name="modes" options={{ title: 'Modes' }} />
-          <Stack.Screen name="activity" options={{ title: 'Activity' }} />
-          <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-          <Stack.Screen name="alarms" options={{ title: 'Alarms' }} />
-          <Stack.Screen
-            name="alarm-ringing"
-            options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
-          />
-          <Stack.Screen name="fold/new" options={{ title: 'Create Fold', presentation: 'modal' }} />
-          <Stack.Screen name="fold/[id]" options={{ title: 'Fold Detail' }} />
-        </Stack>
-      </ErrorBoundary>
-      <StatusBar style="light" />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider value={navTheme}>
+        <ErrorBoundary label="RootLayout">
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: SypauColor.ink },
+              animation: 'fade',
+            }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="permissions" />
+            <Stack.Screen name="home" />
+            <Stack.Screen name="zones/index" />
+            <Stack.Screen name="zones/create" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="zones/[id]/index" />
+            <Stack.Screen name="zones/[id]/edit" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="profiles/index" />
+            <Stack.Screen name="profiles/create" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="profiles/[id]/index" />
+            <Stack.Screen name="profiles/[id]/edit" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="activity" />
+            <Stack.Screen name="settings/index" />
+            <Stack.Screen name="settings/permissions" />
+            <Stack.Screen name="debug" />
+          </Stack>
+        </ErrorBoundary>
+        <StatusBar style="light" />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
