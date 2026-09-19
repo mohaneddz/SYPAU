@@ -1,16 +1,21 @@
 import { geometryArea, geometryContainsPoint, type LatLng } from '@/engine/geo';
-import type { Fold } from '@/types/fold';
+import type { Zone } from '@/types/zone';
 
-/** Folds whose geometry currently contains `point`. */
-export function activeFoldSet(point: LatLng, folds: Fold[], bufferMeters = 0): Fold[] {
-  return folds.filter((fold) => fold.enabled && geometryContainsPoint(point, fold.geometry, bufferMeters));
+/** Enabled zones whose geometry currently contains `point`. */
+export function activeZoneSet(point: LatLng, zones: Zone[], bufferMeters = 0): Zone[] {
+  return zones.filter(
+    (zone) => zone.enabled && geometryContainsPoint(point, zone.geometry, bufferMeters)
+  );
 }
 
 /**
- * Resolve a single fold from the active set: highest priority wins,
- * ties broken by smaller area, then most recently updated.
+ * Pick the one zone that owns the device right now: highest priority wins.
+ *
+ * Ties break to the smaller zone, on the assumption that a zone drawn inside
+ * another is the more specific intent (a bedroom inside a house), then to the
+ * most recently edited so the user's latest change takes effect.
  */
-export function resolveFold(candidates: Fold[]): Fold | null {
+export function resolveZone(candidates: Zone[]): Zone | null {
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
 
