@@ -1,17 +1,18 @@
-export type EventType =
-  | 'ENTER'
-  | 'EXIT'
-  | 'RESOLVE_CHANGE'
-  | 'HOLDING'
-  | 'GPS_DRIFT'
-  | 'PERMISSION'
-  | 'ENGINE_RESTART'
-  | 'ENGINE_ERROR';
+export type EventCategory = 'zone' | 'profile' | 'system' | 'location' | 'error';
 
-export type FieldEvent = {
+export type EventSeverity = 'info' | 'success' | 'warning' | 'error';
+
+export type ActivityEvent = {
   id: string;
-  ts: number;
-  type: EventType;
-  foldId: string | null;
-  payload: Record<string, unknown>;
+  timestamp: number;
+  category: EventCategory;
+  zoneId: string | null;
+  profileId: string | null;
+  title: string;
+  description: string | null;
+  severity: EventSeverity;
+  /** Structured extras for the detail sheet. Never shown raw to the user. */
+  metadata: Record<string, unknown>;
 };
+
+export type ActivityFilter = 'all' | EventCategory;
