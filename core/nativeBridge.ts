@@ -244,6 +244,20 @@ export function startMonitoring(mode: TrackingMode, zoneName: string | null): bo
   }
 }
 
+/**
+ * Mirror the boot preference into native storage, so the receiver can act at
+ * boot without a JS runtime.
+ */
+export function setStartOnBoot(enabled: boolean, mode: TrackingMode): void {
+  if (!SypauSystem) return;
+  try {
+    SypauSystem.setStartOnBoot(enabled, mode);
+  } catch {
+    // Nothing to recover: a device that refuses this simply won't re-arm on
+    // boot, and the settings screen already says monitoring may need a nudge.
+  }
+}
+
 export function stopMonitoring(): boolean {
   if (!SypauSystem) return false;
   try {

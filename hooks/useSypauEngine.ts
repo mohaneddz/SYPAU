@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { startZoneMonitoring, stopZoneMonitoring, syncGeofences } from '@/core/monitoring';
-import { subscribeToSystemEvents } from '@/core/nativeBridge';
+import { setStartOnBoot, subscribeToSystemEvents } from '@/core/nativeBridge';
 import { applyTransition, resolveActiveZone } from '@/core/zoneEngine';
 import { getZone } from '@/db/zones';
 import { useActivityStore } from '@/state/useActivityStore';
@@ -193,6 +193,11 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
       const engine = useEngineStore.getState().engine;
       const activeZone = engine.activeZoneId ? getZone(engine.activeZoneId) : null;
 
+      setStartOnBoot(
+        settings.startOnBoot && settings.automationEnabled && settings.backgroundMonitoringEnabled,
+        settings.trackingMode
+      );
+
       if (settings.automationEnabled && settings.backgroundMonitoringEnabled) {
         void startZoneMonitoring(settings.trackingMode, zones, activeZone?.name ?? null);
       } else {
@@ -206,7 +211,8 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
       const changed =
         state.settings.automationEnabled !== previous.settings.automationEnabled ||
         state.settings.backgroundMonitoringEnabled !== previous.settings.backgroundMonitoringEnabled ||
-        state.settings.trackingMode !== previous.settings.trackingMode;
+        state.settings.trackingMode !== previous.settings.trackingMode ||
+        state.settings.startOnBoot !== previous.settings.startOnBoot;
       if (changed) apply();
     });
   }, []);

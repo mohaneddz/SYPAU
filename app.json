@@ -2,14 +2,14 @@
   "expo": {
     "name": "SYPAU",
     "slug": "SYPAU",
-    "description": "Fold silence into places — SYPAU arms gentle alarm profiles around the map zones you draw.",
+    "description": "Draw zones on a map, attach a profile to each, and SYPAU changes how your phone behaves the moment you cross the line.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sypau",
     "userInterfaceStyle": "dark",
-    "primaryColor": "#34F6D3",
-    "backgroundColor": "#05060A",
+    "primaryColor": "#C81E1E",
+    "backgroundColor": "#0D0D0D",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -19,7 +19,7 @@
       "package": "com.mohaned.sypau",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#05060A",
+        "backgroundColor": "#0D0D0D",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -31,7 +31,10 @@
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "ACCESS_NOTIFICATION_POLICY",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
       ]
     },
     "web": {
@@ -46,16 +49,16 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#05060A",
+          "backgroundColor": "#0D0D0D",
           "dark": {
-            "backgroundColor": "#05060A"
+            "backgroundColor": "#0D0D0D"
           }
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "SYPAU needs your location to detect when you enter or leave a Fold.",
+          "locationAlwaysAndWhenInUsePermission": "SYPAU uses your location to tell when you enter or leave a zone, so it can change your phone settings for you.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
@@ -65,7 +68,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#34F6D3"
+          "color": "#C81E1E"
         }
       ],
       "@maplibre/maplibre-react-native",

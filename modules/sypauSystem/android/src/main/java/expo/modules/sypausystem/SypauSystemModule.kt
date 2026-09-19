@@ -162,6 +162,13 @@ class SypauSystemModule : Module() {
       true
     }
 
+    Function("setStartOnBoot") { enabled: Boolean, mode: String ->
+      // Mirrored into SharedPreferences because at boot there's no JS runtime
+      // to ask and the app database may not be readable yet.
+      BootReceiver.setStartOnBoot(context, enabled, mode)
+      true
+    }
+
     Function("getMonitoringStatus") {
       mapOf(
         "running" to LocationForegroundService.isRunning,

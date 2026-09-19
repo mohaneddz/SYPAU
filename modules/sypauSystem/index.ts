@@ -63,6 +63,7 @@ declare class SypauSystemModuleType extends NativeModule<SypauSystemEvents> {
   clearGeofences(): Promise<boolean>;
 
   startMonitoring(mode: TrackingMode, zoneName: string | null): boolean;
+  setStartOnBoot(enabled: boolean, mode: TrackingMode): boolean;
   stopMonitoring(): boolean;
   updateMonitoringNotification(zoneName: string | null): boolean;
   getMonitoringStatus(): MonitoringStatus;
