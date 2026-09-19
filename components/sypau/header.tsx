@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, View, type ReactNode } from 'react-native';
+import type { ReactNode } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { SypauIcon } from '@/components/sypau/icon';

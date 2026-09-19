@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
-import { Modal, Pressable, StyleSheet, View, type ReactNode } from 'react-native';
+import type { ReactNode } from 'react';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { DarkCard } from '@/components/sypau/cards';
 import { RedButton, StatusChip } from '@/components/sypau/controls';
