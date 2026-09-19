@@ -41,3 +41,8 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Gradle output from building the local Expo module
+modules/*/android/build/
+modules/*/android/.cxx/
+.gradle/
