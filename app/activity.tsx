@@ -76,6 +76,7 @@ export default function ActivityRoute() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filters}>
         {FILTERS.map((entry) => (
           <Pressable
@@ -248,7 +249,10 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: SypauColor.bone, paddingVertical: SypauSpace.md },
 
-  filters: { gap: SypauSpace.sm, paddingRight: SypauSpace.gutter },
+  // A horizontal ScrollView has no intrinsic height, so in a column parent it
+  // stretches to fill and the chips become full-height bars.
+  filterScroll: { flexGrow: 0 },
+  filters: { gap: SypauSpace.sm, paddingRight: SypauSpace.gutter, alignItems: 'center' },
   filterChip: {
     borderRadius: SypauRadius.chip,
     paddingHorizontal: SypauSpace.lg,
