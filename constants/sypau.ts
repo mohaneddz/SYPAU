@@ -70,6 +70,8 @@ export const SypauType = {
   label: { fontFamily: SypauFont.label, fontSize: 14, lineHeight: 18, letterSpacing: 1 },
   labelSm: { fontFamily: SypauFont.label, fontSize: 11, lineHeight: 14, letterSpacing: 1.2 },
   body: { fontFamily: SypauFont.body, fontSize: 15, lineHeight: 22 },
+  /** Body copy that carries the row, e.g. an activity event's title. */
+  bodyMedium: { fontFamily: SypauFont.bodyMedium, fontSize: 15, lineHeight: 22 },
   bodySm: { fontFamily: SypauFont.body, fontSize: 13, lineHeight: 18 },
   /** Handwritten accents: taglines, "YOU ARE INSIDE THIS ZONE". */
   hand: { fontFamily: SypauFont.hand, fontSize: 22, lineHeight: 26 },
