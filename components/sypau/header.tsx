@@ -114,7 +114,9 @@ const styles = StyleSheet.create({
     backgroundColor: SypauColor.ink,
   },
   side: { width: 44, justifyContent: 'center' },
-  sideRight: { alignItems: 'flex-end' },
+  // The right slot takes a caller-supplied node, which can be wider than an
+  // icon — a status chip pinned to 44px wraps its label one letter per line.
+  sideRight: { width: 'auto', minWidth: 44, alignItems: 'flex-end' },
   center: { flex: 1, alignItems: 'center', gap: 2 },
   wordmark: { marginTop: -2 },
   emblem: { width: 38, height: 38 },
