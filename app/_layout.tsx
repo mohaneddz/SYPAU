@@ -9,8 +9,8 @@ import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
@@ -48,7 +48,10 @@ export default function RootLayout() {
 
   const fontsLoaded = antonLoaded && oswaldLoaded && interLoaded && caveatLoaded;
 
+  const [initError, setInitError] = useState<string | null>(null);
+
   useEffect(() => {
+    try {
     getDb();
     seedStarterProfiles();
 
@@ -62,6 +65,9 @@ export default function RootLayout() {
     // while the app is alive, so this is the moment it can have drifted.
     const { logRetentionDays } = useSettingsStore.getState().settings;
     pruneEvents(logRetentionDays);
+    } catch (e) {
+      setInitError(e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    }
   }, []);
 
   useEffect(() => {
@@ -70,6 +76,13 @@ export default function RootLayout() {
 
   // The identity is carried by the type, so holding here avoids a flash of
   // system-font headings before the real faces land.
+  if (initError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#300', padding: 40, justifyContent: 'center' }}>
+        <Text style={{ color: '#fff', fontSize: 16 }}>INIT ERROR: {initError}</Text>
+      </View>
+    );
+  }
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: SypauColor.ink }} />;
 
   return (

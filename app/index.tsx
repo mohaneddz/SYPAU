@@ -1,10 +1,9 @@
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { useEffect } from 'react';
+import { router, useRootNavigationState } from 'expo-router';
+import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -18,65 +17,61 @@ import { SypauAsset, SypauColor, SypauMotion, SypauSpace } from '@/constants/syp
 import { useSettingsStore } from '@/state/useSettingsStore';
 
 /**
- * Launch screen. The cover artwork fades up from black, holds, then fades back
- * out into the app — matching the cover reference rather than dropping the user
+ * Launch screen. The cover fades up from black, holds, then fades back out
+ * into the app — matching the cover reference rather than dropping the user
  * straight onto a dashboard.
  */
 export default function SplashRoute() {
-  const settings = useSettingsStore((s) => s.settings);
-  const hydrated = useSettingsStore((s) => s.hydrated);
-
-  const coverOpacity = useSharedValue(0);
   const blackout = useSharedValue(1);
+  const navigated = useRef(false);
+  // `router.replace` is a no-op until the root navigator has mounted. On a
+  // cold start that can be several seconds, and a replace that quietly does
+  // nothing would strand the user on this screen with no way forward.
+  const rootNavigationKey = useRootNavigationState()?.key;
 
-  const advance = () => {
-    router.replace(settings.onboardingCompleted ? '/home' : '/onboarding');
-  };
+  // Navigation is driven by a plain timer rather than an animation callback.
+  // A `runOnJS` hop out of the UI thread is one more thing that can fail, and
+  // if it does the user is left staring at a black screen with no way out.
+  const advance = useCallback(() => {
+    if (navigated.current) return;
+
+    // Read at the moment of navigation: if hydration hasn't finished the
+    // defaults are correct anyway, so the splash never waits on the database.
+    const { onboardingCompleted } = useSettingsStore.getState().settings;
+    navigated.current = true;
+    router.replace(onboardingCompleted ? '/home' : '/onboarding');
+  }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!rootNavigationKey) return;
 
-    // Fade in from black, hold on the artwork, then fade back to black before
-    // the next screen mounts, so the transition reads as one move.
-    blackout.value = withTiming(0, {
-      duration: SypauMotion.coverFadeMs,
-      easing: Easing.out(Easing.quad),
-    });
+    const { coverFadeMs, coverHoldMs } = SypauMotion;
 
-    coverOpacity.value = withSequence(
-      withTiming(1, { duration: SypauMotion.coverFadeMs, easing: Easing.out(Easing.quad) }),
+    // One overlay does the whole move: lift the black, hold on the artwork,
+    // then lay it back down as the next screen takes over.
+    blackout.value = withSequence(
+      withTiming(0, { duration: coverFadeMs, easing: Easing.out(Easing.quad) }),
       withDelay(
-        SypauMotion.coverHoldMs,
-        withTiming(0, { duration: SypauMotion.coverFadeMs, easing: Easing.in(Easing.quad) })
+        coverHoldMs,
+        withTiming(1, { duration: coverFadeMs, easing: Easing.in(Easing.quad) })
       )
     );
 
-    blackout.value = withDelay(
-      SypauMotion.coverFadeMs + SypauMotion.coverHoldMs,
-      withTiming(1, { duration: SypauMotion.coverFadeMs }, (finished) => {
-        if (finished) runOnJS(advance)();
-      })
-    );
-    // `advance` closes over settings, which are settled once hydrated.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated]);
+    const timer = setTimeout(advance, coverFadeMs * 2 + coverHoldMs);
+    return () => clearTimeout(timer);
+  }, [advance, blackout, rootNavigationKey]);
 
-  const coverStyle = useAnimatedStyle(() => ({ opacity: coverOpacity.value }));
   const blackoutStyle = useAnimatedStyle(() => ({ opacity: blackout.value }));
 
   return (
     <Pressable style={styles.page} onPress={advance} accessibilityLabel="Enter SYPAU">
-      <Animated.View style={[StyleSheet.absoluteFill, coverStyle]}>
-        <Image source={SypauAsset.cover} style={StyleSheet.absoluteFill} contentFit="cover" />
-      </Animated.View>
+      <Image source={SypauAsset.cover} style={StyleSheet.absoluteFill} contentFit="cover" />
 
       <View style={styles.footer} pointerEvents="none">
-        <Animated.View style={coverStyle}>
-          <SypauText variant="label" caps align="center" color={SypauColor.bone}>
-            Tap to enter
-          </SypauText>
-          <HandUnderline width={120} color={SypauColor.cyan} />
-        </Animated.View>
+        <SypauText variant="label" caps align="center" color={SypauColor.bone}>
+          Tap to enter
+        </SypauText>
+        <HandUnderline width={120} color={SypauColor.cyan} />
       </View>
 
       <Animated.View
