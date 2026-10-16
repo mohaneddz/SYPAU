@@ -13,6 +13,7 @@ type ScaffoldProps = {
   children: ReactNode;
   title?: string;
   wordmark?: boolean | 'hero';
+  handTitle?: boolean;
   showBack?: boolean;
   onBack?: () => void;
   headerRight?: ReactNode;
@@ -28,6 +29,7 @@ export function SypauScaffold({
   children,
   title,
   wordmark = false,
+  handTitle = false,
   showBack = false,
   onBack,
   headerRight,
@@ -64,7 +66,8 @@ export function SypauScaffold({
         {showHeader && !hero ? (
           <SypauHeader
             title={title}
-            wordmark={wordmark}
+            wordmark={wordmark === true}
+            handTitle={handTitle}
             showBack={showBack}
             onBack={onBack}
             right={headerRight}

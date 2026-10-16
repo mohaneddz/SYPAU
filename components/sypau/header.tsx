@@ -81,6 +81,8 @@ type HeaderProps = {
   title?: string;
   /** Shows the SYPAU wordmark instead of a plain title. */
   wordmark?: boolean;
+  /** Writes the title by hand, as on the activity reference. */
+  handTitle?: boolean;
   showBack?: boolean;
   onBack?: () => void;
   /** Replaces the default hand emblem on the right. */
@@ -92,7 +94,14 @@ type HeaderProps = {
  * Matches the create-zone and zone-detail references, where the header reads
  * as a piece of paper laid over the page rather than a system app bar.
  */
-export function SypauHeader({ title, wordmark = false, showBack = false, onBack, right }: HeaderProps) {
+export function SypauHeader({
+  title,
+  wordmark = false,
+  handTitle = false,
+  showBack = false,
+  onBack,
+  right,
+}: HeaderProps) {
   return (
     <View style={styles.header}>
       <Grain opacity={0.16} />
@@ -110,8 +119,12 @@ export function SypauHeader({ title, wordmark = false, showBack = false, onBack,
       </View>
 
       <View style={styles.center}>
-        <RedCross size={16} />
-        {wordmark ? (
+        {handTitle ? null : <RedCross size={16} />}
+        {handTitle ? (
+          <SypauText variant="hand" caps align="center" style={styles.handTitle}>
+            {title}
+          </SypauText>
+        ) : wordmark ? (
           <SypauText variant="displaySm" caps style={styles.wordmark}>
             SYPAU
           </SypauText>
@@ -144,6 +157,7 @@ const styles = StyleSheet.create({
   sideRight: { width: 'auto', minWidth: 44, alignItems: 'flex-end' },
   center: { flex: 1, alignItems: 'center', gap: 2 },
   wordmark: { marginTop: -2 },
+  handTitle: { fontSize: 32, lineHeight: 40 },
 
   hero: { alignItems: 'center' },
   heroRow: { flexDirection: 'row', alignItems: 'flex-start' },
