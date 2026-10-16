@@ -19,13 +19,15 @@ import { SypauColor } from '@/constants/sypau';
 import { setupNotificationHandler } from '@/core/notify';
 import { getDb } from '@/db/client';
 import { useSypauEngine } from '@/hooks/useSypauEngine';
+import { loadEngineState } from '@/db/engineState';
 import { pruneEvents } from '@/db/events';
 import { seedStarterProfiles } from '@/db/profiles';
 import { useActivityStore } from '@/state/useActivityStore';
+import { useEngineStore } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { useZoneStore } from '@/state/useZoneStore';
-import '@/tasks/locationTask';
+import { seedBackgroundState } from '@/tasks/locationTask';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -66,6 +68,11 @@ export default function RootLayout() {
       useProfileStore.getState().load();
       useZoneStore.getState().load();
       useActivityStore.getState().load();
+      // Restored before the engine mounts, so a relaunch inside a zone carries
+      // on from where it was instead of entering it again.
+      const engineState = loadEngineState();
+      useEngineStore.getState().setEngine(engineState);
+      seedBackgroundState(engineState);
       void setupNotificationHandler();
 
       // Retention trim on launch rather than on a timer: the log only grows

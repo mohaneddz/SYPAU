@@ -3,6 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 
 import { LOCATION_TASK_NAME } from '@/core/monitoring';
 import { applyTransition, INITIAL_ENGINE_STATE, resolveActiveZone, type EngineState } from '@/core/zoneEngine';
+import { loadEngineState, saveEngineState } from '@/db/engineState';
 import { loadSettings } from '@/db/settings';
 import { listProfiles } from '@/db/profiles';
 import { getZone, listZones } from '@/db/zones';
@@ -14,11 +15,12 @@ import { getZone, listZones } from '@/db/zones';
  * it wakes the app for a location update — a task registered inside a
  * component would not exist yet at that point.
  *
- * Engine state lives in module scope for the same reason: the process may be
- * torn down between updates, in which case we rebuild from the database and
- * the current position rather than assuming continuity.
+ * Engine state lives in module scope for the same reason. The process may be
+ * torn down between updates, so a cold start reloads what was persisted rather
+ * than assuming nothing was active.
  */
 let backgroundState: EngineState = INITIAL_ENGINE_STATE;
+let backgroundLoaded = false;
 let backgroundDwell: Record<string, number> = {};
 
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
@@ -31,6 +33,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   try {
     const settings = loadSettings();
     if (!settings.automationEnabled) return;
+
+    if (!backgroundLoaded) {
+      backgroundState = loadEngineState();
+      backgroundLoaded = true;
+    }
 
     const zones = listZones();
     const profiles = listProfiles();
@@ -60,6 +67,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       settings,
       state: backgroundState,
     });
+    saveEngineState(backgroundState);
   } catch {
     // A throw here would have Android treat the task as misbehaving and back
     // off from waking us; losing one update is the lesser cost.
@@ -69,6 +77,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 /** Lets the foreground hand its current state to the background task. */
 export function seedBackgroundState(state: EngineState): void {
   backgroundState = state;
+  backgroundLoaded = true;
 }
 
 export function getBackgroundState(): EngineState {
