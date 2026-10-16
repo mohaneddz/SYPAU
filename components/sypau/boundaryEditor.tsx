@@ -1,3 +1,4 @@
+import { Marker } from '@maplibre/maplibre-react-native';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -7,7 +8,8 @@ import { SypauText } from '@/components/sypau/text';
 import { VertexHandle, ZoneMap, type ZoneMapHandle } from '@/components/sypau/zoneMap';
 import { SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import type { Geometry, LatLng } from '@/engine/geo';
-import { simplifyPath } from '@/utils/geometry';
+import { centroidOf, simplifyPath } from '@/utils/geometry';
+import { toLngLat } from '@/utils/map-geo';
 import type { BoundaryType } from '@/types/zone';
 
 export type BoundaryDraft =
@@ -38,6 +40,8 @@ type BoundaryEditorProps = {
   draft: BoundaryDraft;
   onChange: (draft: BoundaryDraft) => void;
   userLocation: LatLng | null;
+  /** Height of whatever is laid over the map's top edge, e.g. a header. */
+  topInset?: number;
   style?: object;
 };
 
@@ -48,7 +52,13 @@ type BoundaryEditorProps = {
  * path that's simplified before it becomes a boundary — a drag produces a point
  * per touch event, and none of the extra ones carry intent.
  */
-export function BoundaryEditor({ draft, onChange, userLocation, style }: BoundaryEditorProps) {
+export function BoundaryEditor({
+  draft,
+  onChange,
+  userLocation,
+  topInset = SypauSpace.lg,
+  style,
+}: BoundaryEditorProps) {
   const mapControl = useRef<ZoneMapHandle | null>(null);
   const [selectedVertex, setSelectedVertex] = useState<number | null>(null);
   const [tracing, setTracing] = useState(false);
@@ -144,11 +154,20 @@ export function BoundaryEditor({ draft, onChange, userLocation, style }: Boundar
           {draft.type === 'radius' && draft.center ? (
             <VertexHandle point={draft.center} selected />
           ) : null}
+
+          {/* The pin at the heart of the shape, as in the reference. */}
+          {geometry && geometry.type === 'polygon' ? (
+            <Marker lngLat={toLngLat(centroidOf(geometry.points) ?? geometry.points[0])} anchor="bottom">
+              <View pointerEvents="none" style={styles.centerPin}>
+                <SypauIcon name="pin" size={30} color={SypauColor.ink} />
+              </View>
+            </Marker>
+          ) : null}
         </ZoneMap>
       </View>
 
       {/* Map controls, per the create-zone reference. */}
-      <View style={styles.mapControls}>
+      <View style={[styles.mapControls, { top: topInset + SypauSpace.xxl * 2 }]}>
         <MapButton
           icon="locate"
           label="Recentre"
@@ -188,7 +207,7 @@ export function BoundaryEditor({ draft, onChange, userLocation, style }: Boundar
         {pointCount > 0 ? (
           <>
             <Pressable accessibilityRole="button" onPress={undo} style={styles.editButton}>
-              <SypauIcon name="refresh" size={16} />
+              <SypauIcon name="undo" size={16} />
               <SypauText variant="labelSm" caps>
                 Undo
               </SypauText>
@@ -204,7 +223,7 @@ export function BoundaryEditor({ draft, onChange, userLocation, style }: Boundar
         ) : null}
       </View>
 
-      <View style={styles.hint}>
+      <View style={[styles.hint, { top: topInset + SypauSpace.sm }]}>
         <SypauText variant="labelSm" caps color={SypauColor.cyan}>
           {hintFor(draft, tracing, selectedVertex)}
         </SypauText>
@@ -251,9 +270,9 @@ const styles = StyleSheet.create({
   mapControls: {
     position: 'absolute',
     right: SypauSpace.lg,
-    top: '32%',
     gap: SypauSpace.md,
   },
+  centerPin: { alignItems: 'center' },
   mapButton: {
     width: 48,
     height: 48,
@@ -265,7 +284,8 @@ const styles = StyleSheet.create({
   editControls: {
     position: 'absolute',
     left: SypauSpace.lg,
-    bottom: SypauSpace.lg,
+    // Clears the form sheet that overlaps the map's lower edge.
+    bottom: SypauSpace.xl + SypauSpace.md,
     flexDirection: 'row',
     gap: SypauSpace.sm,
   },
@@ -284,7 +304,6 @@ const styles = StyleSheet.create({
   hint: {
     position: 'absolute',
     left: SypauSpace.lg,
-    top: SypauSpace.lg,
     backgroundColor: 'rgba(13,13,13,0.88)',
     borderRadius: SypauRadius.pill,
     paddingHorizontal: SypauSpace.md,

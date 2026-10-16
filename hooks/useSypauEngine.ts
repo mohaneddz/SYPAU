@@ -1,10 +1,11 @@
 import * as Location from 'expo-location';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { startZoneMonitoring, stopZoneMonitoring, syncGeofences } from '@/core/monitoring';
 import { setStartOnBoot, subscribeToSystemEvents } from '@/core/nativeBridge';
 import { applyTransition, resolveActiveZone } from '@/core/zoneEngine';
+import { saveEngineState } from '@/db/engineState';
 import { getZone } from '@/db/zones';
 import { useActivityStore } from '@/state/useActivityStore';
 import { useEngineStore } from '@/state/useEngineStore';
@@ -14,95 +15,180 @@ import { useZoneStore } from '@/state/useZoneStore';
 import { seedBackgroundState } from '@/tasks/locationTask';
 
 /**
- * Drives the automation while the UI is open.
+ * Dwell timers survive screen changes. They used to live in a ref per hook
+ * instance, so each screen that mounted the engine kept its own clock.
+ */
+let dwellSince: Record<string, number> = {};
+
+function evaluate(point: { latitude: number; longitude: number }) {
+  const settings = useSettingsStore.getState().settings;
+  const zones = useZoneStore.getState().zones;
+  const profiles = useProfileStore.getState().profiles;
+  const engineState = useEngineStore.getState().engine;
+
+  const previousActiveZone = engineState.activeZoneId ? getZone(engineState.activeZoneId) : null;
+
+  const outcome = resolveActiveZone({
+    position: point,
+    zones,
+    profiles,
+    settings,
+    state: engineState,
+    dwellSince,
+  });
+
+  dwellSince = outcome.dwellSince;
+
+  const nextState = applyTransition({
+    outcome,
+    previousActiveZone,
+    profiles,
+    settings,
+    state: engineState,
+  });
+
+  useEngineStore.getState().setEngine(nextState);
+  saveEngineState(nextState);
+  // Handed over so a background wake-up continues from what the UI knew
+  // rather than rebuilding ownership from nothing.
+  seedBackgroundState(nextState);
+
+  if (outcome.profileChanged) {
+    useActivityStore.getState().load();
+  }
+}
+
+function recordFix(position: Location.LocationObject) {
+  const point = {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+  };
+
+  useEngineStore.getState().setFix({
+    point,
+    accuracyMeters: position.coords.accuracy,
+    speedMetersPerSecond: position.coords.speed,
+    headingDegrees: position.coords.heading,
+    timestamp: position.timestamp,
+    provider: position.mocked ? 'mock' : 'fused',
+  });
+
+  evaluate(point);
+}
+
+function reevaluateLastFix() {
+  const fix = useEngineStore.getState().fix;
+  if (fix) evaluate(fix.point);
+}
+
+/** How long Balanced gets before GPS is asked as well. */
+const BALANCED_GRACE_MS = 6_000;
+
+/**
+ * Balanced leans on Wi-Fi and cell positioning. Where there's neither — no
+ * signal, airplane mode, an emulator — it can wait indefinitely, so after a
+ * grace period GPS is asked too and whichever answers first wins.
+ */
+function balancedFixWithFallback(): Promise<Location.LocationObject> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let failures = 0;
+    const settle = (position: Location.LocationObject) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(position);
+    };
+    const fail = (error: unknown) => {
+      failures += 1;
+      if (failures === 2 && !settled) reject(error);
+    };
+
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(settle, (error) => {
+      fail(error);
+      // No point waiting out the grace period for a request that's already lost.
+      clearTimeout(timer);
+      if (!settled) startHigh();
+    });
+
+    let highStarted = false;
+    const startHigh = () => {
+      if (highStarted) return;
+      highStarted = true;
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).then(settle, fail);
+    };
+    const timer = setTimeout(startHigh, BALANCED_GRACE_MS);
+  });
+}
+
+/**
+ * Take one fix and run it through the engine.
+ *
+ * `forced` is the debug screen's "force location update": the user asked for
+ * the truth right now, so it powers up GPS instead of accepting whatever cached
+ * network position Balanced would hand back.
+ */
+export async function refreshLocation({ forced = false }: { forced?: boolean } = {}) {
+  try {
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      useEngineStore.getState().pushDiagnostic({
+        message: 'No location permission',
+        detail: 'Grant precise location to take a fix.',
+        severity: 'warning',
+      });
+      return;
+    }
+
+    // A fresh fix can take seconds to arrive, or never on a cold radio. The
+    // last known position paints the map and the zone state straight away and
+    // the real fix replaces it when it lands. Forced refreshes skip this: the
+    // user is asking precisely because they don't trust what's cached.
+    if (!forced) {
+      const cached = await Location.getLastKnownPositionAsync({ maxAge: 10 * 60_000 });
+      if (cached && !useEngineStore.getState().fix) recordFix(cached);
+    }
+
+    const position = forced
+      ? await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest })
+      : await balancedFixWithFallback();
+    recordFix(position);
+
+    if (forced) {
+      useEngineStore.getState().pushDiagnostic({
+        message: 'Location update received',
+        detail:
+          position.coords.accuracy != null ? `${Math.round(position.coords.accuracy)} m acc.` : null,
+        severity: 'info',
+      });
+    }
+  } catch (error) {
+    useEngineStore.getState().pushDiagnostic({
+      message: 'Couldn’t get a location fix',
+      detail: error instanceof Error ? error.message : null,
+      severity: 'warning',
+    });
+  }
+}
+
+/**
+ * Drives the automation while the UI is open. Mounted once, at the root.
  *
  * The background task owns the same engine when the app isn't running; this
  * hook exists so the visible state stays live and transitions are reflected
- * immediately rather than on next launch.
+ * immediately rather than on next launch. Mounting it per screen started
+ * monitoring and subscribed to system events once per screen on the stack.
  */
-export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
-  const dwellRef = useRef<Record<string, number>>({});
-
-  const evaluate = useCallback(
-    (point: { latitude: number; longitude: number }) => {
-      const settings = useSettingsStore.getState().settings;
-      const zones = useZoneStore.getState().zones;
-      const profiles = useProfileStore.getState().profiles;
-      const engineState = useEngineStore.getState().engine;
-
-      const previousActiveZone = engineState.activeZoneId
-        ? getZone(engineState.activeZoneId)
-        : null;
-
-      const outcome = resolveActiveZone({
-        position: point,
-        zones,
-        profiles,
-        settings,
-        state: engineState,
-        dwellSince: dwellRef.current,
-      });
-
-      dwellRef.current = outcome.dwellSince;
-
-      const nextState = applyTransition({
-        outcome,
-        previousActiveZone,
-        profiles,
-        settings,
-        state: engineState,
-      });
-
-      useEngineStore.getState().setEngine(nextState);
-      // Handed over so a background wake-up continues from what the UI knew
-      // rather than rebuilding ownership from nothing.
-      seedBackgroundState(nextState);
-
-      if (outcome.profileChanged) {
-        useActivityStore.getState().load();
-      }
-    },
-    []
-  );
-
-  const refreshLocation = useCallback(async () => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const point = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      };
-
-      useEngineStore.getState().setFix({
-        point,
-        accuracyMeters: position.coords.accuracy,
-        speedMetersPerSecond: position.coords.speed,
-        headingDegrees: position.coords.heading,
-        timestamp: position.timestamp,
-        provider: position.mocked ? 'mock' : 'fused',
-      });
-
-      evaluate(point);
-    } catch (error) {
-      useEngineStore.getState().pushDiagnostic({
-        message: 'Couldn’t get a location fix',
-        detail: error instanceof Error ? error.message : null,
-        severity: 'warning',
-      });
-    }
-  }, [evaluate]);
-
+export function useSypauEngine(): void {
   // Foreground position watch. Separate from the background task so the UI
   // updates smoothly without raising the background cadence.
   useEffect(() => {
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
+
+    // The watch below can take a full interval to deliver its first position,
+    // which leaves every screen saying "waiting for a fix" right after launch.
+    void refreshLocation();
 
     (async () => {
       const { status } = await Location.getForegroundPermissionsAsync();
@@ -110,23 +196,7 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
 
       subscription = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.Balanced, timeInterval: 15_000, distanceInterval: 20 },
-        (position) => {
-          const point = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          };
-
-          useEngineStore.getState().setFix({
-            point,
-            accuracyMeters: position.coords.accuracy,
-            speedMetersPerSecond: position.coords.speed,
-            headingDegrees: position.coords.heading,
-            timestamp: position.timestamp,
-            provider: position.mocked ? 'mock' : 'fused',
-          });
-
-          evaluate(point);
-        }
+        recordFix
       );
     })();
 
@@ -134,7 +204,7 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
       cancelled = true;
       subscription?.remove();
     };
-  }, [evaluate]);
+  }, []);
 
   // Platform geofence transitions, which arrive whether or not the UI is up.
   useEffect(() => {
@@ -174,13 +244,18 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
         void refreshLocation();
       }
     });
-  }, [evaluate, refreshLocation]);
+  }, []);
 
   // Keep the registered fence set in step with the user's zones.
   useEffect(() => {
     const unsubscribe = useZoneStore.subscribe((state, previous) => {
       if (state.zones === previous.zones) return;
       void syncGeofences(state.zones);
+      // Re-judge where we stand against the new zones right away. The position
+      // watch only fires on movement, so standing still after pausing,
+      // redrawing or deleting the zone you're in would otherwise change nothing
+      // until you walked somewhere.
+      reevaluateLastFix();
     });
     return unsubscribe;
   }, []);
@@ -214,6 +289,9 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
         state.settings.trackingMode !== previous.settings.trackingMode ||
         state.settings.startOnBoot !== previous.settings.startOnBoot;
       if (changed) apply();
+      if (state.settings.automationEnabled !== previous.settings.automationEnabled) {
+        reevaluateLastFix();
+      }
     });
   }, []);
 
@@ -226,7 +304,5 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
       void refreshLocation();
     });
     return () => subscription.remove();
-  }, [refreshLocation]);
-
-  return { refreshLocation };
+  }, []);
 }

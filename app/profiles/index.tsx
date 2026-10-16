@@ -211,8 +211,9 @@ export default function ProfilesRoute() {
         visible={refusal !== null}
         title="Can't delete this profile"
         message={refusal ?? ''}
+        icon="info"
         confirmLabel="Got it"
-        cancelLabel="Close"
+        cancelLabel={null}
         onCancel={() => setRefusal(null)}
         onConfirm={() => setRefusal(null)}
       />

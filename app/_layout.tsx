@@ -18,13 +18,16 @@ import { ErrorBoundary } from '@/components/errorBoundary';
 import { SypauColor } from '@/constants/sypau';
 import { setupNotificationHandler } from '@/core/notify';
 import { getDb } from '@/db/client';
+import { useSypauEngine } from '@/hooks/useSypauEngine';
+import { loadEngineState } from '@/db/engineState';
 import { pruneEvents } from '@/db/events';
 import { seedStarterProfiles } from '@/db/profiles';
 import { useActivityStore } from '@/state/useActivityStore';
+import { useEngineStore } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { useZoneStore } from '@/state/useZoneStore';
-import '@/tasks/locationTask';
+import { seedBackgroundState } from '@/tasks/locationTask';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -52,6 +55,9 @@ export default function RootLayout() {
   // failure here means no database, so it's surfaced rather than left to
   // present as an app that opens to nothing.
   const [initError, setInitError] = useState<string | null>(null);
+  // Child effects run before this component's own, so the engine waits on this
+  // rather than on mount order to know the stores are filled.
+  const [initDone, setInitDone] = useState(false);
 
   useEffect(() => {
     try {
@@ -62,12 +68,18 @@ export default function RootLayout() {
       useProfileStore.getState().load();
       useZoneStore.getState().load();
       useActivityStore.getState().load();
+      // Restored before the engine mounts, so a relaunch inside a zone carries
+      // on from where it was instead of entering it again.
+      const engineState = loadEngineState();
+      useEngineStore.getState().setEngine(engineState);
+      seedBackgroundState(engineState);
       void setupNotificationHandler();
 
       // Retention trim on launch rather than on a timer: the log only grows
       // while the app is alive, so this is the moment it can have drifted.
       const { logRetentionDays } = useSettingsStore.getState().settings;
       pruneEvents(logRetentionDays);
+      setInitDone(true);
     } catch (error) {
       setInitError(error instanceof Error ? error.message : String(error));
     }
@@ -87,6 +99,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider value={navTheme}>
         <ErrorBoundary label="RootLayout">
+          {initDone ? <EngineHost /> : null}
           <Stack
             screenOptions={{
               headerShown: false,
@@ -99,6 +112,7 @@ export default function RootLayout() {
             <Stack.Screen name="home" />
             <Stack.Screen name="zones/index" />
             <Stack.Screen name="zones/create" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="zones/map" />
             <Stack.Screen name="zones/[id]/index" />
             <Stack.Screen name="zones/[id]/edit" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="profiles/index" />
@@ -115,6 +129,16 @@ export default function RootLayout() {
       </ThemeProvider>
     </SafeAreaProvider>
   );
+}
+
+/**
+ * Runs the zone engine for as long as the UI is up, independent of which screen
+ * is showing. Rendered only after startup succeeded, since the engine reads the
+ * stores startup fills.
+ */
+function EngineHost() {
+  useSypauEngine();
+  return null;
 }
 
 /**

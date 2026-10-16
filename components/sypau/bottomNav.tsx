@@ -64,8 +64,8 @@ export function SypauBottomNav({ onCreatePress }: BottomNavProps) {
           color={active ? SypauColor.red : SypauColor.boneMuted}
         />
         <SypauText
-          variant="labelSm"
-          caps
+          variant="bodySm"
+          style={styles.tabLabel}
           color={active ? SypauColor.red : SypauColor.boneMuted}>
           {item.label}
         </SypauText>
@@ -132,6 +132,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center' },
   tab: { flex: 1, alignItems: 'center', gap: 3, paddingVertical: 2 },
+  tabLabel: { fontSize: 12, lineHeight: 16 },
   createButton: {
     position: 'absolute',
     alignSelf: 'center',

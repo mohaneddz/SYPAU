@@ -13,7 +13,7 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { DarkCard, PaperCard } from '@/components/sypau/cards';
 import { StatusChip } from '@/components/sypau/controls';
-import { HandUnderline, RedCross } from '@/components/sypau/header';
+import { HandUnderline } from '@/components/sypau/header';
 import { SypauIcon } from '@/components/sypau/icon';
 import { SypauScaffold } from '@/components/sypau/scaffold';
 import { SypauText } from '@/components/sypau/text';
@@ -22,7 +22,6 @@ import { ZoneMap } from '@/components/sypau/zoneMap';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { geometryArea } from '@/engine/geo';
 import { countEventsSince } from '@/db/events';
-import { useSypauEngine } from '@/hooks/useSypauEngine';
 import { useActivityStore } from '@/state/useActivityStore';
 import { useEngineStore } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
@@ -31,8 +30,6 @@ import { useZoneStore } from '@/state/useZoneStore';
 import { formatArea } from '@/utils/geometry';
 
 export default function HomeRoute() {
-  useSypauEngine();
-
   const engine = useEngineStore((s) => s.engine);
   const fix = useEngineStore((s) => s.fix);
   const zones = useZoneStore((s) => s.zones);
@@ -65,7 +62,7 @@ export default function HomeRoute() {
 
   return (
     <SypauScaffold
-      wordmark
+      wordmark="hero"
       headerRight={
         <Pressable
           accessibilityRole="button"
@@ -96,7 +93,7 @@ export default function HomeRoute() {
         <Grain opacity={0.2} />
         <Image source={SypauAsset.emblem} style={styles.bannerEmblem} contentFit="contain" />
         <View style={styles.bannerText}>
-          <SypauText variant="cardTitle" caps color={SypauColor.bone}>
+          <SypauText variant="hand" caps color={SypauColor.bone} style={styles.bannerTitle}>
             Create Zone
           </SypauText>
           <SypauText variant="labelSm" caps color="rgba(236,234,230,0.82)">
@@ -202,7 +199,7 @@ function StateCard({
     ? 'Automation is off.\nNothing will change on its own.'
     : zoneName
       ? 'You’re inside your zone.\nSilence is in control.'
-      : 'No zone claims you right now.\nYour phone is yours.';
+      : 'No zone claims you.\nYour phone is yours.';
 
   return (
     <View style={styles.stateCard}>
@@ -224,7 +221,14 @@ function StateCard({
             {zoneName ?? 'No active zone'}
           </SypauText>
 
-          <SypauText variant="hero" caps color={stateColor}>
+          <SypauText
+            variant="hand"
+            caps
+            color={stateColor}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+            style={styles.stateWord}>
             {state}
           </SypauText>
           <HandUnderline width={130} color={SypauColor.cyan} />
@@ -280,11 +284,14 @@ function EffectsStrip({
     <PaperCard seed={17} contentStyle={styles.stripContent}>
       {items.map((item, index) => (
         <View key={item.label} style={[styles.stripItem, index > 0 && styles.stripDivider]}>
-          <SypauIcon
-            name={item.muted ? (item.icon === 'phone' ? 'phoneOff' : 'volumeOff') : item.icon}
-            size={22}
-            color={SypauColor.paperInk}
-          />
+          <View>
+            <SypauIcon name={item.icon} size={24} color={SypauColor.paperInk} />
+            {item.muted ? (
+              <View style={styles.mutedBadge}>
+                <SypauIcon name="close" size={8} color={SypauColor.bone} />
+              </View>
+            ) : null}
+          </View>
           <View>
             <SypauText variant="labelSm" caps color={SypauColor.paperInk}>
               {item.label}
@@ -336,23 +343,27 @@ function CurrentZoneCard({
       <SypauText variant="section" caps color={SypauColor.cyan}>
         Current zone
       </SypauText>
-      <SypauText variant="cardTitle" caps>
-        {zone.name}
-      </SypauText>
 
-      <ZoneMap
-        geometries={[{ id: zone.id, geometry: zone.geometry }]}
-        userLocation={userPoint}
-        interactive={false}
-        zoom={13}
-        style={styles.miniMap}
-      />
+      <View style={styles.summaryBody}>
+        <View style={styles.summaryText}>
+          <SypauText variant="cardTitle" numberOfLines={1}>
+            {zone.name}
+          </SypauText>
+          <View style={styles.areaRow}>
+            <SypauIcon name="pin" size={13} color={SypauColor.boneMuted} />
+            <SypauText variant="bodySm" color={SypauColor.boneMuted} numberOfLines={1}>
+              {formatArea(geometryArea(zone.geometry))}
+            </SypauText>
+          </View>
+        </View>
 
-      <View style={styles.areaRow}>
-        <SypauIcon name="pin" size={13} color={SypauColor.boneMuted} />
-        <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-          {formatArea(geometryArea(zone.geometry))}
-        </SypauText>
+        <ZoneMap
+          geometries={[{ id: zone.id, geometry: zone.geometry }]}
+          userLocation={userPoint}
+          interactive={false}
+          fitPadding={8}
+          style={styles.miniMap}
+        />
       </View>
     </DarkCard>
   );
@@ -373,29 +384,36 @@ function SilenceTimeCard({ activeSince }: { activeSince: number | null }) {
       <SypauText variant="section" caps color={SypauColor.cyan}>
         Silence time
       </SypauText>
-      <SypauText variant="cardTitle" caps>
-        {activeSince ? `${hours}h ${minutes}m` : '—'}
-      </SypauText>
-      <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-        {activeSince ? 'This session' : 'Not active'}
-      </SypauText>
 
-      <View style={styles.ring}>
-        <Svg width={84} height={84} viewBox="0 0 84 84">
-          <Circle cx={42} cy={42} r={radius} stroke={SypauColor.hairline} strokeWidth={5} fill="none" />
-          <Circle
-            cx={42}
-            cy={42}
-            r={radius}
-            stroke={SypauColor.cyan}
-            strokeWidth={5}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={`${circumference * progress} ${circumference}`}
-            transform="rotate(-90 42 42)"
-          />
-        </Svg>
-        <Image source={SypauAsset.emblem} style={styles.ringEmblem} contentFit="contain" />
+      <View style={styles.summaryBody}>
+        <View style={styles.summaryText}>
+          <SypauText variant="cardTitle">
+            {activeSince ? (hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`) : '—'}
+          </SypauText>
+          <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+            {activeSince ? 'So far' : 'Not active'}
+          </SypauText>
+        </View>
+
+        <View style={styles.ring}>
+          <Svg width={72} height={72} viewBox="0 0 84 84">
+            <Circle cx={42} cy={42} r={radius} stroke={SypauColor.hairline} strokeWidth={5} fill="none" />
+            {progress > 0 ? (
+              <Circle
+                cx={42}
+                cy={42}
+                r={radius}
+                stroke={SypauColor.cyan}
+                strokeWidth={5}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={`${circumference * progress} ${circumference}`}
+                transform="rotate(-90 42 42)"
+              />
+            ) : null}
+          </Svg>
+          <Image source={SypauAsset.emblem} style={styles.ringEmblem} contentFit="contain" />
+        </View>
       </View>
     </DarkCard>
   );
@@ -446,6 +464,18 @@ const styles = StyleSheet.create({
     gap: SypauSpace.sm,
     paddingHorizontal: SypauSpace.sm,
   },
+  // The small red cross the reference pins to a muted category's icon.
+  mutedBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -3,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: SypauColor.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   stripDivider: {
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: 'rgba(20,20,18,0.25)',
@@ -463,14 +493,22 @@ const styles = StyleSheet.create({
   },
   bannerEmblem: { width: 42, height: 42 },
   bannerText: { flex: 1 },
+  bannerTitle: { fontSize: 34, lineHeight: 36 },
 
   summaryRow: { flexDirection: 'row', gap: SypauSpace.md },
-  summaryCard: { flex: 1, gap: SypauSpace.xs },
-  miniMap: { height: 84, borderRadius: SypauRadius.chip, marginTop: SypauSpace.sm },
-  areaRow: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.xs, marginTop: SypauSpace.xs },
+  summaryCard: { flex: 1, gap: SypauSpace.sm },
+  summaryBody: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.sm },
+  summaryText: { flex: 1, gap: SypauSpace.xs },
+  miniMap: { width: 72, height: 72, borderRadius: SypauRadius.chip },
+  areaRow: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.xs },
 
-  ring: { alignItems: 'center', justifyContent: 'center', marginTop: SypauSpace.sm },
-  ringEmblem: { position: 'absolute', width: 40, height: 40 },
+  ring: { alignItems: 'center', justifyContent: 'center' },
+  ringEmblem: { position: 'absolute', width: 34, height: 34 },
+
+  tagline: { alignItems: 'center', marginTop: -SypauSpace.sm },
+  // A slight tilt is what makes the line read as written on, not typeset.
+  taglineText: { transform: [{ rotate: '-3deg' }] },
+  stateWord: { fontSize: 66, lineHeight: 70, marginBottom: -6 },
 
   overlapHeader: {
     flexDirection: 'row',

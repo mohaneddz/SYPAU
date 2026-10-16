@@ -52,10 +52,37 @@ export function HandUnderline({ width = 130, color = SypauColor.red }: { width?:
   );
 }
 
+/**
+ * The poster-sized SYPAU™ that opens the home and settings references, as
+ * opposed to the small one that labels every other screen.
+ */
+export function HeroWordmark({ caption }: { caption?: string }) {
+  return (
+    <View style={styles.hero} accessibilityRole="header" accessibilityLabel="SYPAU">
+      <RedCross size={30} />
+      <View style={styles.heroRow}>
+        <SypauText variant="display" style={styles.heroWord}>
+          SYPAU
+        </SypauText>
+        <SypauText variant="labelSm" color={SypauColor.bone} style={styles.trademark}>
+          TM
+        </SypauText>
+      </View>
+      {caption ? (
+        <SypauText variant="section" caps color={SypauColor.bone} style={styles.heroCaption}>
+          {caption}
+        </SypauText>
+      ) : null}
+    </View>
+  );
+}
+
 type HeaderProps = {
   title?: string;
   /** Shows the SYPAU wordmark instead of a plain title. */
   wordmark?: boolean;
+  /** Writes the title by hand, as on the activity reference. */
+  handTitle?: boolean;
   showBack?: boolean;
   onBack?: () => void;
   /** Replaces the default hand emblem on the right. */
@@ -67,7 +94,14 @@ type HeaderProps = {
  * Matches the create-zone and zone-detail references, where the header reads
  * as a piece of paper laid over the page rather than a system app bar.
  */
-export function SypauHeader({ title, wordmark = false, showBack = false, onBack, right }: HeaderProps) {
+export function SypauHeader({
+  title,
+  wordmark = false,
+  handTitle = false,
+  showBack = false,
+  onBack,
+  right,
+}: HeaderProps) {
   return (
     <View style={styles.header}>
       <Grain opacity={0.16} />
@@ -85,8 +119,12 @@ export function SypauHeader({ title, wordmark = false, showBack = false, onBack,
       </View>
 
       <View style={styles.center}>
-        <RedCross size={16} />
-        {wordmark ? (
+        {handTitle ? null : <RedCross size={16} />}
+        {handTitle ? (
+          <SypauText variant="hand" caps align="center" style={styles.handTitle}>
+            {title}
+          </SypauText>
+        ) : wordmark ? (
           <SypauText variant="displaySm" caps style={styles.wordmark}>
             SYPAU
           </SypauText>
@@ -119,5 +157,12 @@ const styles = StyleSheet.create({
   sideRight: { width: 'auto', minWidth: 44, alignItems: 'flex-end' },
   center: { flex: 1, alignItems: 'center', gap: 2 },
   wordmark: { marginTop: -2 },
+  handTitle: { fontSize: 32, lineHeight: 40 },
+
+  hero: { alignItems: 'center' },
+  heroRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  heroWord: { fontSize: 76, lineHeight: 82, letterSpacing: 1, marginTop: -4 },
+  trademark: { fontSize: 9, lineHeight: 12, marginTop: 10, marginLeft: 1 },
+  heroCaption: { fontSize: 15, letterSpacing: 9, marginTop: SypauSpace.xs },
   emblem: { width: 38, height: 38 },
 });

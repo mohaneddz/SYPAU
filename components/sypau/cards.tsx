@@ -17,6 +17,8 @@ type PaperCardProps = {
   /** Which edges tear. The home status strip tears top and bottom. */
   tear?: 'both' | 'top' | 'bottom' | 'none';
   seed?: number;
+  /** Whatever the card sits on, so the tear reads as missing paper. */
+  tearColor?: string;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
 };
@@ -30,6 +32,7 @@ export function PaperCard({
   children,
   tear = 'both',
   seed = 1,
+  tearColor = SypauColor.ink,
   style,
   contentStyle,
 }: PaperCardProps) {
@@ -48,12 +51,12 @@ export function PaperCard({
 
       {tearsTop ? (
         <View style={styles.tearTop}>
-          <TornEdge width={width} color={SypauColor.ink} facing="up" seed={seed} height={9} />
+          <TornEdge width={width} color={tearColor} facing="up" seed={seed} height={9} />
         </View>
       ) : null}
       {tearsBottom ? (
         <View style={styles.tearBottom}>
-          <TornEdge width={width} color={SypauColor.ink} facing="down" seed={seed + 31} height={9} />
+          <TornEdge width={width} color={tearColor} facing="down" seed={seed + 31} height={9} />
         </View>
       ) : null}
     </View>

@@ -93,6 +93,72 @@ export function effectsOf(config: ProfileConfig): Effect[] {
   return effects;
 }
 
+/**
+ * The zone-detail form of the list: what happens when the zone takes over, in
+ * the order it's applied, as the reference's numbered ACTIONS (IN ORDER).
+ * A blocked control trades its icon for a warning instead of repeating the
+ * same sentence under every row — the caller explains it once.
+ */
+export function NumberedEffectRows({
+  config,
+  capabilities,
+}: {
+  config: ProfileConfig;
+  capabilities: CapabilityMap;
+}) {
+  const effects = effectsOf(config);
+
+  if (effects.length === 0) {
+    return (
+      <SypauText variant="bodySm" color={SypauColor.boneFaint}>
+        This profile doesn&rsquo;t change anything yet.
+      </SypauText>
+    );
+  }
+
+  return (
+    <View>
+      {effects.map((effect, index) => {
+        const note = capabilityNote(capabilities[effect.key]?.status);
+        return (
+          <View
+            key={effect.key}
+            style={[styles.numberedRow, index > 0 && styles.numberedDivider]}
+            accessible
+            accessibilityLabel={`${index + 1}. ${controlLabel(effect.key)}: ${effect.value}${note ? `. ${note.text}` : ''}`}>
+            <View style={styles.step}>
+              <SypauText variant="labelSm" color={SypauColor.red}>
+                {index + 1}
+              </SypauText>
+            </View>
+            <View style={styles.labels}>
+              <SypauText variant="label" caps>
+                {controlLabel(effect.key)}
+              </SypauText>
+              <SypauText variant="bodySm" color={note ? note.color : SypauColor.boneMuted}>
+                {note ? `${effect.value} · ${note.text}` : `Set to ${effect.value.toLowerCase()}`}
+              </SypauText>
+            </View>
+            <SypauIcon
+              name={note ? 'alert' : effect.icon}
+              size={20}
+              color={note ? note.color : SypauColor.bone}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** How many of a profile's controls Android is currently blocking. */
+export function blockedEffectCount(config: ProfileConfig, capabilities: CapabilityMap): number {
+  return effectsOf(config).filter((effect) => {
+    const status = capabilities[effect.key]?.status;
+    return status === 'requiresPermission' || status === 'requiresSettingsPanel';
+  }).length;
+}
+
 type ProfileEffectRowsProps = {
   config: ProfileConfig;
   capabilities: CapabilityMap;
@@ -185,4 +251,23 @@ const styles = StyleSheet.create({
   list: { gap: SypauSpace.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.md },
   labels: { flex: 1 },
+  numberedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SypauSpace.md,
+    paddingVertical: SypauSpace.sm + 2,
+  },
+  numberedDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: SypauColor.hairline,
+  },
+  step: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: SypauColor.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

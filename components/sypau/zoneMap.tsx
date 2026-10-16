@@ -12,7 +12,8 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SYPAU_MAP_STYLE } from '@/constants/map-style';
 import { SypauColor } from '@/constants/sypau';
 import { circlePolygonPoints, type Geometry, type LatLng } from '@/engine/geo';
-import { pointsToLngLatRing, toLngLat } from '@/utils/map-geo';
+import { centroidOf } from '@/utils/geometry';
+import { boundsOf, pointsToLngLatRing, toLngLat } from '@/utils/map-geo';
 
 /** A zone's outline as a closed ring, whatever shape it was drawn as. */
 export function geometryToRing(geometry: Geometry): LatLng[] {
@@ -20,19 +21,6 @@ export function geometryToRing(geometry: Geometry): LatLng[] {
     return circlePolygonPoints(geometry.center, geometry.radiusMeters, 64);
   }
   return geometry.points;
-}
-
-export function geometryCenter(geometry: Geometry): LatLng {
-  if (geometry.type === 'circle') return geometry.center;
-
-  const points = geometry.points;
-  if (points.length === 0) return { latitude: 0, longitude: 0 };
-
-  const sum = points.reduce(
-    (acc, p) => ({ latitude: acc.latitude + p.latitude, longitude: acc.longitude + p.longitude }),
-    { latitude: 0, longitude: 0 }
-  );
-  return { latitude: sum.latitude / points.length, longitude: sum.longitude / points.length };
 }
 
 type BoundaryProps = {
@@ -79,11 +67,15 @@ export function ZoneBoundary({ id, geometry, muted = false }: BoundaryProps) {
 export type ZoneMapHandle = {
   flyTo: (point: LatLng, zoom?: number) => void;
   zoomBy: (delta: number) => void;
+  /** Frames every zone on the map, e.g. after the list changes. */
+  fitAll: () => void;
+  /** Frames just these shapes, e.g. the zone picked from a list. */
+  fitTo: (geometries: Geometry[]) => void;
 };
 
 type ZoneMapProps = {
-  /** Zones to draw. The first frames the camera when no centre is given. */
-  geometries?: { id: string; geometry: Geometry; muted?: boolean }[];
+  /** Zones to draw. Together they frame the camera when no centre is given. */
+  geometries?: { id: string; geometry: Geometry; muted?: boolean; label?: string }[];
   center?: LatLng | null;
   zoom?: number;
   userLocation?: LatLng | null;
@@ -92,6 +84,12 @@ type ZoneMapProps = {
   onPress?: (point: LatLng) => void;
   /** Kept in a ref so the map isn't re-rendered just to recentre it. */
   controlRef?: React.MutableRefObject<ZoneMapHandle | null>;
+  /**
+   * Inset, in points, between the zones and the map edge when the camera frames
+   * them. Thumbnails want the shape to fill the frame; full maps want room for
+   * the controls laid over them.
+   */
+  fitPadding?: number;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
 };
@@ -108,14 +106,27 @@ export function ZoneMap({
   interactive = true,
   onPress,
   controlRef,
+  fitPadding = 18,
   style,
   children,
 }: ZoneMapProps) {
   const cameraRef = useRef<CameraRef>(null);
   const zoomRef = useRef(zoom);
 
-  const cameraCenter =
-    center ?? (geometries[0] ? geometryCenter(geometries[0].geometry) : null) ?? userLocation;
+  // A fixed zoom frames a 100 m zone and a 3 km one identically, so one is a
+  // speck and the other overflows. Framing by bounds gives every zone its frame.
+  const bounds = useMemo(
+    () => (center ? null : boundsOf(geometries.map((entry) => entry.geometry))),
+    [center, geometries]
+  );
+  const padding = useMemo(
+    () => ({ top: fitPadding, right: fitPadding, bottom: fitPadding, left: fitPadding }),
+    [fitPadding]
+  );
+  const boundsRef = useRef(bounds);
+  boundsRef.current = bounds;
+
+  const cameraCenter = center ?? userLocation;
 
   useEffect(() => {
     if (!controlRef) return;
@@ -133,8 +144,17 @@ export function ZoneMap({
         zoomRef.current = Math.min(20, Math.max(2, zoomRef.current + delta));
         cameraRef.current?.zoomTo(zoomRef.current, { duration: 250 });
       },
+      fitAll: () => {
+        if (!boundsRef.current) return;
+        cameraRef.current?.fitBounds(boundsRef.current, { padding, duration: 600 });
+      },
+      fitTo: (shapes) => {
+        const target = boundsOf(shapes);
+        if (!target) return;
+        cameraRef.current?.fitBounds(target, { padding, duration: 600 });
+      },
     };
-  }, [controlRef]);
+  }, [controlRef, padding]);
 
   return (
     <View style={[styles.map, style]}>
@@ -160,8 +180,13 @@ export function ZoneMap({
         }>
         <Camera
           ref={cameraRef}
+          maxZoom={19}
           initialViewState={
-            cameraCenter ? { center: toLngLat(cameraCenter), zoom } : { zoom }
+            bounds
+              ? { bounds, padding }
+              : cameraCenter
+                ? { center: toLngLat(cameraCenter), zoom }
+                : { zoom }
           }
         />
 
@@ -174,11 +199,62 @@ export function ZoneMap({
           />
         ))}
 
+        <ZoneLabels geometries={geometries} />
+
         {userLocation ? <UserMarker point={userLocation} /> : null}
 
         {children}
       </Map>
     </View>
+  );
+}
+
+/**
+ * Zone names drawn by the map itself rather than as React markers, so they
+ * stay pinned through pans and zooms and give way to each other on collision.
+ */
+function ZoneLabels({ geometries }: { geometries: ZoneMapProps['geometries'] }) {
+  const data = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: 'FeatureCollection',
+      features: (geometries ?? [])
+        .filter((entry) => entry.label)
+        .map((entry) => {
+          const center =
+            entry.geometry.type === 'circle'
+              ? entry.geometry.center
+              : (centroidOf(entry.geometry.points) ?? entry.geometry.points[0]);
+          return {
+            type: 'Feature',
+            properties: { name: entry.label!.toUpperCase(), muted: entry.muted ? 1 : 0 },
+            geometry: { type: 'Point', coordinates: toLngLat(center) },
+          };
+        }),
+    }),
+    [geometries]
+  );
+
+  if (data.features.length === 0) return null;
+
+  return (
+    <GeoJSONSource id="zoneLabels" data={data}>
+      <Layer
+        id="zoneLabelText"
+        type="symbol"
+        layout={{
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 13,
+          'text-letter-spacing': 0.12,
+          'text-offset': [0, 1.6],
+        }}
+        paint={{
+          'text-color': ['case', ['==', ['get', 'muted'], 1], SypauColor.boneFaint, SypauColor.bone],
+          'text-halo-color': SypauColor.ink,
+          'text-halo-width': 1.6,
+        }}
+      />
+    </GeoJSONSource>
   );
 }
 

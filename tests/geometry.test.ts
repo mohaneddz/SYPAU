@@ -1,5 +1,6 @@
 import {
   circlePolygonPoints,
+  distanceToEdge,
   distanceToGeometry,
   geometryArea,
   geometryContainsPoint,
@@ -8,7 +9,8 @@ import {
   polygonContainsPoint,
   type LatLng,
 } from '@/engine/geo';
-import { simplifyPath } from '@/utils/geometry';
+import { geometriesOverlap, simplifyPath } from '@/utils/geometry';
+import { boundsOf } from '@/utils/map-geo';
 
 const ORIGIN: LatLng = { latitude: 36.7538, longitude: 3.0588 };
 
@@ -92,6 +94,84 @@ describe('distanceToGeometry', () => {
     // ~200 m from the centre, so ~100 m from the boundary.
     expect(distanceToGeometry(far, geometry)).toBeGreaterThan(90);
     expect(distanceToGeometry(far, geometry)).toBeLessThan(110);
+  });
+});
+
+describe('distanceToEdge', () => {
+  it('measures to the border from inside a polygon instead of returning zero', () => {
+    // The origin sits ~100 m from each side of the square.
+    const distance = distanceToEdge(ORIGIN, { type: 'polygon', points: SQUARE });
+    expect(distance).toBeGreaterThan(80);
+    expect(distance).toBeLessThan(120);
+  });
+
+  it('measures to a circle edge from inside', () => {
+    const geometry = { type: 'circle' as const, center: ORIGIN, radiusMeters: 100 };
+    expect(distanceToEdge(ORIGIN, geometry)).toBeCloseTo(100, 0);
+  });
+});
+
+describe('boundsOf', () => {
+  it('is null with nothing to frame', () => {
+    expect(boundsOf([])).toBeNull();
+  });
+
+  it('frames a polygon by its extreme points, as [west, south, east, north]', () => {
+    expect(boundsOf([{ type: 'polygon', points: SQUARE }])).toEqual([3.0577, 36.7529, 3.0599, 36.7547]);
+  });
+
+  it('frames a circle by its edge rather than its centre', () => {
+    const [west, south, east, north] = boundsOf([
+      { type: 'circle', center: ORIGIN, radiusMeters: 1000 },
+    ])!;
+    expect(haversineDistance({ latitude: south, longitude: ORIGIN.longitude }, ORIGIN)).toBeCloseTo(1000, -1);
+    expect(haversineDistance({ latitude: north, longitude: ORIGIN.longitude }, ORIGIN)).toBeCloseTo(1000, -1);
+    expect(haversineDistance({ latitude: ORIGIN.latitude, longitude: west }, ORIGIN)).toBeCloseTo(1000, -1);
+    expect(haversineDistance({ latitude: ORIGIN.latitude, longitude: east }, ORIGIN)).toBeCloseTo(1000, -1);
+  });
+});
+
+describe('geometriesOverlap', () => {
+  const square = { type: 'polygon' as const, points: SQUARE };
+  const shifted = (dLng: number) => ({
+    type: 'polygon' as const,
+    points: SQUARE.map((p) => ({ latitude: p.latitude, longitude: p.longitude + dLng })),
+  });
+
+  it('spots two polygons sharing ground', () => {
+    expect(geometriesOverlap(square, shifted(0.001))).toBe(true);
+  });
+
+  it('leaves apart polygons apart', () => {
+    expect(geometriesOverlap(square, shifted(0.01))).toBe(false);
+  });
+
+  it('counts a zone nested wholly inside another', () => {
+    const inner = { type: 'circle' as const, center: ORIGIN, radiusMeters: 20 };
+    expect(geometriesOverlap(square, inner)).toBe(true);
+    expect(geometriesOverlap(inner, square)).toBe(true);
+  });
+
+  it('catches a cross shape where no vertex is inside the other', () => {
+    const wide = {
+      type: 'polygon' as const,
+      points: [
+        { latitude: 36.7536, longitude: 3.0560 },
+        { latitude: 36.7540, longitude: 3.0560 },
+        { latitude: 36.7540, longitude: 3.0616 },
+        { latitude: 36.7536, longitude: 3.0616 },
+      ],
+    };
+    const tall = {
+      type: 'polygon' as const,
+      points: [
+        { latitude: 36.7520, longitude: 3.0586 },
+        { latitude: 36.7556, longitude: 3.0586 },
+        { latitude: 36.7556, longitude: 3.0590 },
+        { latitude: 36.7520, longitude: 3.0590 },
+      ],
+    };
+    expect(geometriesOverlap(wide, tall)).toBe(true);
   });
 });
 

@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   Dimensions,
+  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -23,6 +24,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type Page = {
   icon: SypauIconName;
+  /** The folded map for the page about drawing zones, the emblem elsewhere. */
+  art: 'map' | 'emblem';
   title: string;
   tagline: string;
   body: string;
@@ -36,24 +39,28 @@ type Page = {
 const PAGES: Page[] = [
   {
     icon: 'pin',
+    art: 'map',
     title: 'Create your zones',
     tagline: 'Draw your boundary.',
     body: 'Mark the places that matter — home, campus, the library. A zone is just a shape on a map.',
   },
   {
     icon: 'layers',
+    art: 'emblem',
     title: 'Build profiles',
     tagline: 'One state of mind.',
     body: 'Decide how your phone should behave. Silent ringer, Do Not Disturb, media down — alarms only if you say so.',
   },
   {
     icon: 'zap',
+    art: 'emblem',
     title: 'SYPAU takes over',
     tagline: 'We keep it that way.',
     body: 'Walk in and your profile activates. Walk out and your phone goes back to how you left it.',
   },
   {
     icon: 'lock',
+    art: 'emblem',
     title: 'Background access',
     tagline: 'Why we ask.',
     body: 'SYPAU has to notice you crossing a boundary while the app is closed. That needs background location, and it never leaves your phone.',
@@ -73,13 +80,17 @@ export default function OnboardingRoute() {
     if (next !== page) setPage(next);
   };
 
+  const finish = () => {
+    update({ onboardingCompleted: true });
+    router.replace('/permissions');
+  };
+
   const advance = () => {
     if (!isLast) {
       scrollRef.current?.scrollTo({ x: (page + 1) * SCREEN_WIDTH, animated: true });
       return;
     }
-    update({ onboardingCompleted: true });
-    router.replace('/permissions');
+    finish();
   };
 
   return (
@@ -91,6 +102,18 @@ export default function OnboardingRoute() {
         <SypauText variant="displaySm" caps>
           SYPAU
         </SypauText>
+        {!isLast ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Skip the introduction"
+            hitSlop={12}
+            onPress={finish}
+            style={styles.skip}>
+            <SypauText variant="label" caps color={SypauColor.boneMuted}>
+              Skip
+            </SypauText>
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView
@@ -103,7 +126,11 @@ export default function OnboardingRoute() {
         style={styles.pager}>
         {PAGES.map((entry) => (
           <View key={entry.title} style={styles.slide}>
-            <Image source={SypauAsset.emblem} style={styles.emblem} contentFit="contain" />
+            <Image
+              source={entry.art === 'map' ? SypauAsset.foldedMap : SypauAsset.emblem}
+              style={entry.art === 'map' ? styles.map : styles.emblem}
+              contentFit="contain"
+            />
 
             <View style={styles.iconBadge}>
               <SypauIcon name={entry.icon} size={24} color={SypauColor.cyan} />
@@ -157,6 +184,8 @@ const styles = StyleSheet.create({
     gap: SypauSpace.md,
   },
   emblem: { width: 130, height: 110, marginBottom: SypauSpace.lg },
+  map: { width: 280, height: 150, marginBottom: SypauSpace.lg },
+  skip: { position: 'absolute', right: SypauSpace.gutter, top: SypauSpace.xl },
   iconBadge: {
     width: 52,
     height: 52,
