@@ -76,6 +76,11 @@ function recordFix(position: Location.LocationObject) {
   evaluate(point);
 }
 
+function reevaluateLastFix() {
+  const fix = useEngineStore.getState().fix;
+  if (fix) evaluate(fix.point);
+}
+
 /** How long Balanced gets before GPS is asked as well. */
 const BALANCED_GRACE_MS = 6_000;
 
@@ -246,6 +251,11 @@ export function useSypauEngine(): void {
     const unsubscribe = useZoneStore.subscribe((state, previous) => {
       if (state.zones === previous.zones) return;
       void syncGeofences(state.zones);
+      // Re-judge where we stand against the new zones right away. The position
+      // watch only fires on movement, so standing still after pausing,
+      // redrawing or deleting the zone you're in would otherwise change nothing
+      // until you walked somewhere.
+      reevaluateLastFix();
     });
     return unsubscribe;
   }, []);
@@ -279,6 +289,9 @@ export function useSypauEngine(): void {
         state.settings.trackingMode !== previous.settings.trackingMode ||
         state.settings.startOnBoot !== previous.settings.startOnBoot;
       if (changed) apply();
+      if (state.settings.automationEnabled !== previous.settings.automationEnabled) {
+        reevaluateLastFix();
+      }
     });
   }, []);
 

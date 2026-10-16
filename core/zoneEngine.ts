@@ -345,7 +345,7 @@ function releaseToFallback(args: {
   updateMonitoringNotification(null);
 
   if (settings.notifyOnProfileChange) {
-    void notify('Previous state restored', 'You left your zone. Your phone is yours again.');
+    void notify('Previous state restored', 'No zone holds your phone now. Everything SYPAU changed is back.');
   }
 
   return { ...state, snapshot: null, ownedKeys: [], activeSince: null };
