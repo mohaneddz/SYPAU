@@ -2,29 +2,33 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { Image } from 'expo-image';
+import { Children, isValidElement, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { DarkCard } from '@/components/sypau/cards';
 import { Segmented, SypauSwitch } from '@/components/sypau/controls';
 import { SypauConfirmDialog } from '@/components/sypau/feedback';
+import { RedCross } from '@/components/sypau/header';
 import { SypauIcon, type SypauIconName } from '@/components/sypau/icon';
 import { SypauScaffold } from '@/components/sypau/scaffold';
 import { SectionTitle, SypauText } from '@/components/sypau/text';
-import { SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
+import { Grain } from '@/components/sypau/texture';
+import { TornEdge } from '@/components/sypau/tornEdge';
+import Svg, { Circle } from 'react-native-svg';
+import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { listEvents } from '@/db/events';
 import { listProfiles } from '@/db/profiles';
 import { resetAllData } from '@/db/settings';
 import { listZones } from '@/db/zones';
 import { useActivityStore } from '@/state/useActivityStore';
+import { useEngineStore } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
-import { useZoneStore } from '@/state/useZoneStore';
 import type { TrackingMode } from '@/types/settings';
 
 const TRACKING_OPTIONS: { value: TrackingMode; label: string; sublabel: string }[] = [
   { value: 'batterySaver', label: 'Saver', sublabel: 'Lightest' },
-  { value: 'balanced', label: 'Balanced', sublabel: 'Recommended' },
+  { value: 'balanced', label: 'Balanced', sublabel: 'Default' },
   { value: 'highAccuracy', label: 'Precise', sublabel: 'Heaviest' },
 ];
 
@@ -36,6 +40,12 @@ export default function SettingsRoute() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const permissions = useEngineStore((s) => s.permissions);
+  const missingPermissions = Object.values(permissions).filter(
+    (permission) => !permission.granted
+  ).length;
 
   const defaultProfile =
     profiles.find((p) => p.id === settings.defaultProfileId) ??
@@ -64,226 +74,243 @@ export default function SettingsRoute() {
   };
 
   return (
-    <SypauScaffold wordmark showBack>
-      <SypauText variant="section" caps align="center" color={SypauColor.boneMuted}>
-        Settings
-      </SypauText>
+    <SypauScaffold showBack showHeader={false}>
+      <SettingsHero />
 
       <SectionTitle>Control</SectionTitle>
-
-      <NavRow
-        icon="lock"
-        title="Permissions"
-        description="Location, notifications and system access"
-        onPress={() => router.push('/settings/permissions')}
-      />
-      <NavRow
-        icon="layers"
-        title="Profiles"
-        description="Manage how your phone behaves"
-        onPress={() => router.push('/profiles')}
-      />
-      <NavRow
-        icon="pin"
-        title="Zones"
-        description="Manage your boundaries"
-        onPress={() => router.push('/zones')}
-      />
+      <Group>
+        <NavRow
+          art="emblem"
+          title="Permissions"
+          description={
+            missingPermissions > 0
+              ? `${missingPermissions} ${missingPermissions === 1 ? 'thing needs' : 'things need'} your OK`
+              : 'Everything SYPAU needs is granted'
+          }
+          badge={missingPermissions > 0}
+          onPress={() => router.push('/settings/permissions')}
+        />
+        <NavRow
+          icon="layers"
+          iconColor={SypauColor.red}
+          title="Alarm profiles"
+          description="How your phone behaves inside each zone"
+          onPress={() => router.push('/profiles')}
+        />
+        <NavRow
+          icon="pin"
+          title="Zones"
+          description="Your boundaries, and the map of all of them"
+          onPress={() => router.push('/zones')}
+        />
+      </Group>
 
       <SectionTitle>Automation</SectionTitle>
+      <Group>
+        <ToggleRow
+          icon="zap"
+          title="SYPAU enabled"
+          description="Turn everything off without losing your zones."
+          value={settings.automationEnabled}
+          onValueChange={(automationEnabled) => update({ automationEnabled })}
+        />
+        <ToggleRow
+          icon="activity"
+          title="Background monitoring"
+          description="Keep watching zones while the app is closed."
+          value={settings.backgroundMonitoringEnabled}
+          onValueChange={(backgroundMonitoringEnabled) => update({ backgroundMonitoringEnabled })}
+        />
+        <ToggleRow
+          icon="refresh"
+          title="Restore on exit"
+          description="Put your phone back the way SYPAU found it."
+          value={settings.restorePreviousState}
+          onValueChange={(restorePreviousState) => update({ restorePreviousState })}
+        />
+        <ToggleRow
+          icon="clock"
+          title="Start on boot"
+          description="Resume monitoring after your phone restarts."
+          value={settings.startOnBoot}
+          onValueChange={(startOnBoot) => update({ startOnBoot })}
+        />
+      </Group>
 
-      <ToggleRow
-        icon="zap"
-        title="SYPAU enabled"
-        description="Turn everything off without losing your zones."
-        value={settings.automationEnabled}
-        onValueChange={(automationEnabled) => update({ automationEnabled })}
-      />
-      <ToggleRow
-        icon="activity"
-        title="Background monitoring"
-        description="Keep watching zones while the app is closed."
-        value={settings.backgroundMonitoringEnabled}
-        onValueChange={(backgroundMonitoringEnabled) => update({ backgroundMonitoringEnabled })}
-      />
-      <ToggleRow
-        icon="refresh"
-        title="Restore on exit"
-        description="Put your device back the way SYPAU found it."
-        value={settings.restorePreviousState}
-        onValueChange={(restorePreviousState) => update({ restorePreviousState })}
-      />
-      <ToggleRow
-        icon="clock"
-        title="Start on boot"
-        description="Resume monitoring after your phone restarts."
-        value={settings.startOnBoot}
-        onValueChange={(startOnBoot) => update({ startOnBoot })}
-      />
+      <Group>
+        <View style={styles.blockRow}>
+          <SypauText variant="bodyMedium">Fallback profile</SypauText>
+          <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+            Used when no zone claims your phone.
+          </SypauText>
 
-      <DarkCard>
-        <SypauText variant="label" caps>
-          Fallback profile
-        </SypauText>
-        <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-          Used when no zone claims your phone.
-        </SypauText>
-
-        <View style={styles.profileChips}>
-          {profiles.map((profile) => (
-            <Pressable
-              key={profile.id}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: defaultProfile?.id === profile.id }}
-              onPress={() => update({ defaultProfileId: profile.id })}
-              style={[
-                styles.chip,
-                defaultProfile?.id === profile.id && styles.chipSelected,
-              ]}>
-              <SypauText
-                variant="labelSm"
-                caps
-                color={
-                  defaultProfile?.id === profile.id ? SypauColor.paperInk : SypauColor.boneMuted
-                }>
-                {profile.name}
-              </SypauText>
-            </Pressable>
-          ))}
+          <View style={styles.profileChips}>
+            {profiles.map((profile) => (
+              <Pressable
+                key={profile.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: defaultProfile?.id === profile.id }}
+                onPress={() => update({ defaultProfileId: profile.id })}
+                style={[styles.chip, defaultProfile?.id === profile.id && styles.chipSelected]}>
+                <SypauText
+                  variant="labelSm"
+                  caps
+                  color={
+                    defaultProfile?.id === profile.id ? SypauColor.paperInk : SypauColor.boneMuted
+                  }>
+                  {profile.name}
+                </SypauText>
+              </Pressable>
+            ))}
+          </View>
         </View>
-      </DarkCard>
+      </Group>
 
       <SectionTitle>Location</SectionTitle>
+      <Group>
+        <View style={styles.blockRow}>
+          <SypauText variant="bodyMedium">Tracking mode</SypauText>
+          <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+            Balanced leans on Android&rsquo;s own geofencing, which costs almost nothing. Precise
+            adds a constant location service and noticeably more battery.
+          </SypauText>
 
-      <DarkCard>
-        <SypauText variant="label" caps>
-          Tracking mode
-        </SypauText>
-        <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-          Balanced leans on Android&rsquo;s own geofencing, which costs almost nothing. Precise adds
-          a constant location service and noticeably more battery.
-        </SypauText>
-
-        <Segmented
-          options={TRACKING_OPTIONS}
-          value={settings.trackingMode}
-          onChange={(trackingMode) => update({ trackingMode })}
-          style={styles.trackingSegmented}
-        />
-      </DarkCard>
+          <Segmented
+            options={TRACKING_OPTIONS}
+            value={settings.trackingMode}
+            onChange={(trackingMode) => update({ trackingMode })}
+            style={styles.trackingSegmented}
+          />
+        </View>
+      </Group>
 
       <SectionTitle>Notifications</SectionTitle>
-
-      <ToggleRow
-        icon="layers"
-        title="Profile changes"
-        description="Log when a profile activates."
-        value={settings.notifyOnProfileChange}
-        onValueChange={(notifyOnProfileChange) => update({ notifyOnProfileChange })}
-      />
-      <ToggleRow
-        icon="pin"
-        title="Zone transitions"
-        description="Log entering and leaving a zone."
-        value={settings.notifyOnZoneTransition}
-        onValueChange={(notifyOnZoneTransition) => update({ notifyOnZoneTransition })}
-      />
-      <ToggleRow
-        icon="alert"
-        title="Errors"
-        description="Tell me when something couldn't be applied."
-        value={settings.notifyOnError}
-        onValueChange={(notifyOnError) => update({ notifyOnError })}
-      />
-
-      <SectionTitle>Data &amp; storage</SectionTitle>
-
-      <NavRow
-        icon="export"
-        title="Export configuration"
-        description="Save your zones, profiles and settings"
-        onPress={exportConfiguration}
-      />
-      <NavRow
-        icon="export"
-        title="Export activity log"
-        description="Save the full event history"
-        onPress={exportLogs}
-      />
-      <NavRow
-        icon="trash"
-        title="Clear activity log"
-        description="Keep zones and profiles, drop the history"
-        onPress={() => setConfirmClearLogs(true)}
-      />
-      <NavRow
-        icon="alert"
-        title="Reset app data"
-        description="Delete everything and start over"
-        destructive
-        onPress={() => setConfirmReset(true)}
-      />
-
-      <SectionTitle>Privacy</SectionTitle>
-      <DarkCard>
-        <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-          Your location is processed on this device and never leaves it. Zones, profiles and the
-          activity log are stored locally in this app. SYPAU has no account, no server and no
-          analytics.
-        </SypauText>
-      </DarkCard>
-
-      <SectionTitle>Appearance</SectionTitle>
-
-      <ToggleRow
-        icon="layers"
-        title="Textures"
-        description="The paper and grain overlays."
-        value={settings.texturesEnabled}
-        onValueChange={(texturesEnabled) => update({ texturesEnabled })}
-      />
-      <ToggleRow
-        icon="activity"
-        title="Reduced motion"
-        description="Stop the radar and pulse animations."
-        value={settings.reducedMotion}
-        onValueChange={(reducedMotion) => update({ reducedMotion })}
-      />
-
-      <SectionTitle>Developer</SectionTitle>
-
-      <ToggleRow
-        icon="bug"
-        title="GPS debug"
-        description="Show the location diagnostic screen."
-        value={settings.debugEnabled}
-        tone="red"
-        onValueChange={(debugEnabled) => update({ debugEnabled })}
-      />
-
-      {settings.debugEnabled ? (
-        <NavRow
-          icon="bug"
-          title="Open GPS debug"
-          description="Live location and geofence diagnostics"
-          onPress={() => router.push('/debug')}
+      <Group>
+        <ToggleRow
+          icon="bell"
+          badge
+          title="Profile changes"
+          description="Tell me when a profile takes over."
+          value={settings.notifyOnProfileChange}
+          onValueChange={(notifyOnProfileChange) => update({ notifyOnProfileChange })}
         />
-      ) : null}
+        <ToggleRow
+          icon="pin"
+          title="Zone transitions"
+          description="Tell me when I enter or leave a zone."
+          value={settings.notifyOnZoneTransition}
+          onValueChange={(notifyOnZoneTransition) => update({ notifyOnZoneTransition })}
+        />
+        <ToggleRow
+          icon="alert"
+          title="Errors"
+          description="Tell me when something couldn't be applied."
+          value={settings.notifyOnError}
+          onValueChange={(notifyOnError) => update({ notifyOnError })}
+        />
+      </Group>
+
+      <SectionTitle>Data</SectionTitle>
+      <Group>
+        <NavRow
+          icon="export"
+          title="Export configuration"
+          description="Back up your zones, profiles and settings"
+          onPress={exportConfiguration}
+        />
+        <NavRow
+          icon="export"
+          title="Export activity log"
+          description="Save the full event history"
+          onPress={exportLogs}
+        />
+        <NavRow
+          icon="trash"
+          title="Clear activity log"
+          description="Keep zones and profiles, drop the history"
+          onPress={() => setConfirmClearLogs(true)}
+        />
+        <NavRow
+          icon="alert"
+          title="Reset app data"
+          description="Delete everything and start over"
+          destructive
+          onPress={() => setConfirmReset(true)}
+        />
+      </Group>
+
+      <SectionTitle>Preferences</SectionTitle>
+      <Group>
+        <NavRow
+          icon="shield"
+          iconColor={SypauColor.red}
+          title="Privacy"
+          description="Your location never leaves this phone"
+          onPress={() => setPrivacyOpen(true)}
+        />
+        <ToggleRow
+          icon="layers"
+          title="Textures"
+          description="The paper and grain overlays."
+          value={settings.texturesEnabled}
+          onValueChange={(texturesEnabled) => update({ texturesEnabled })}
+        />
+        <ToggleRow
+          icon="activity"
+          title="Reduced motion"
+          description="Stop the radar and pulse animations."
+          value={settings.reducedMotion}
+          onValueChange={(reducedMotion) => update({ reducedMotion })}
+        />
+        <ToggleRow
+          icon="target"
+          title="GPS debug"
+          description="Show GPS accuracy and logs."
+          value={settings.debugEnabled}
+          tone="red"
+          onValueChange={(debugEnabled) => update({ debugEnabled })}
+        />
+        {settings.debugEnabled ? (
+          <NavRow
+            icon="bug"
+            title="Open GPS debug"
+            description="Live location and geofence diagnostics"
+            onPress={() => router.push('/debug')}
+          />
+        ) : null}
+      </Group>
 
       <SectionTitle>About</SectionTitle>
-      <DarkCard>
-        <View style={styles.aboutRow}>
-          <SypauText variant="label" caps>
-            SYPAU
-          </SypauText>
-          <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-            Version {Constants.expoConfig?.version ?? '1.0.0'}
-          </SypauText>
-        </View>
-        <SypauText variant="bodySm" color={SypauColor.boneFaint}>
-          You set the silence. We keep it that way.
-        </SypauText>
-      </DarkCard>
+      <Group>
+        <NavRow
+          art="emblem"
+          title="About SYPAU"
+          description={`Version ${Constants.expoConfig?.version ?? '1.0.0'} \u2022 You set the silence`}
+          onPress={() => setAboutOpen(true)}
+        />
+      </Group>
+
+      <SypauConfirmDialog
+        visible={privacyOpen}
+        icon="shield"
+        title="Privacy"
+        message="Your location is processed on this phone and never leaves it. Zones, profiles and the activity log are stored only in this app. SYPAU has no account, no server and no analytics."
+        confirmLabel="Got it"
+        cancelLabel={null}
+        onCancel={() => setPrivacyOpen(false)}
+        onConfirm={() => setPrivacyOpen(false)}
+      />
+
+      <SypauConfirmDialog
+        visible={aboutOpen}
+        icon="info"
+        title="SYPAU"
+        message={`Version ${Constants.expoConfig?.version ?? '1.0.0'}. Draw zones on a map, attach a profile to each, and your phone changes how it behaves the moment you cross the line.`}
+        confirmLabel="Close"
+        cancelLabel={null}
+        onCancel={() => setAboutOpen(false)}
+        onConfirm={() => setAboutOpen(false)}
+      />
 
       <SypauConfirmDialog
         visible={confirmClearLogs}
@@ -347,38 +374,125 @@ async function writeAndShare(
   }
 }
 
+/**
+ * The settings reference's top: the poster wordmark over faint radar rings,
+ * the red cross between two rules, and the spaced-out title, torn off below.
+ */
+function SettingsHero() {
+  const [width, setWidth] = useState(0);
+  return (
+    <View style={styles.hero} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      <View style={styles.rings} pointerEvents="none">
+        <Svg width={360} height={360} viewBox="0 0 360 360">
+          {[170, 130, 90].map((r) => (
+            <Circle key={r} cx={180} cy={180} r={r} stroke={SypauColor.hairline} strokeWidth={1} fill="none" />
+          ))}
+        </Svg>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        hitSlop={12}
+        onPress={() => router.back()}
+        style={styles.heroBack}>
+        <SypauIcon name="back" size={26} />
+      </Pressable>
+      <SypauText variant="display" style={styles.heroWord}>
+        SYPAU
+      </SypauText>
+      <View style={styles.heroDivider}>
+        <View style={styles.heroRule} />
+        <RedCross size={30} />
+        <View style={styles.heroRule} />
+      </View>
+      <SypauText variant="section" caps color={SypauColor.bone} style={styles.heroCaption}>
+        Settings
+      </SypauText>
+      <View style={styles.heroTear}>
+        <TornEdge width={width + SypauSpace.gutter * 2} color={SypauColor.ink} facing="down" seed={41} height={10} />
+      </View>
+    </View>
+  );
+}
+
+/** One card per section, rows divided by hairlines, as in the reference. */
+function Group({ children }: { children: ReactNode }) {
+  const rows = Children.toArray(children).filter(isValidElement);
+  return (
+    <View style={styles.group}>
+      <Grain opacity={0.1} />
+      {rows.map((row, index) => (
+        <View key={index} style={index > 0 ? styles.groupDivider : undefined}>
+          {row}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function RowArt({
+  icon,
+  art,
+  color,
+  badge,
+}: {
+  icon?: SypauIconName;
+  art?: 'emblem';
+  color: string;
+  badge?: boolean;
+}) {
+  return (
+    <View style={styles.rowArt}>
+      {art === 'emblem' ? (
+        <Image source={SypauAsset.emblem} style={styles.rowEmblem} contentFit="contain" />
+      ) : icon ? (
+        <SypauIcon name={icon} size={24} color={color} />
+      ) : null}
+      {badge ? <View style={styles.rowBadge} /> : null}
+    </View>
+  );
+}
+
 function NavRow({
   icon,
+  art,
+  iconColor,
   title,
   description,
   onPress,
+  badge = false,
   destructive = false,
 }: {
-  icon: SypauIconName;
+  icon?: SypauIconName;
+  art?: 'emblem';
+  iconColor?: string;
   title: string;
   description: string;
   onPress: () => void;
+  badge?: boolean;
   destructive?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`${title}. ${description}`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <SypauIcon
-        name={icon}
-        size={20}
-        color={destructive ? SypauColor.red : SypauColor.boneMuted}
+      <RowArt
+        icon={icon}
+        art={art}
+        badge={badge}
+        color={destructive ? SypauColor.red : (iconColor ?? SypauColor.boneMuted)}
       />
       <View style={styles.rowText}>
-        <SypauText variant="label" caps color={destructive ? SypauColor.red : SypauColor.bone}>
+        <SypauText variant="bodyMedium" style={styles.rowTitle} color={destructive ? SypauColor.red : SypauColor.bone}>
           {title}
         </SypauText>
         <SypauText variant="bodySm" color={SypauColor.boneMuted}>
           {description}
         </SypauText>
       </View>
-      <SypauIcon name="chevron" size={18} color={SypauColor.boneFaint} />
+      <SypauIcon name="chevron" size={20} color={SypauColor.boneFaint} />
     </Pressable>
   );
 }
@@ -389,6 +503,7 @@ function ToggleRow({
   description,
   value,
   onValueChange,
+  badge = false,
   tone = 'cyan',
 }: {
   icon: SypauIconName;
@@ -396,42 +511,64 @@ function ToggleRow({
   description: string;
   value: boolean;
   onValueChange: (next: boolean) => void;
+  badge?: boolean;
   tone?: 'cyan' | 'red';
 }) {
   return (
     <View style={styles.row}>
-      <SypauIcon name={icon} size={20} color={SypauColor.boneMuted} />
+      <RowArt icon={icon} badge={badge} color={SypauColor.boneMuted} />
       <View style={styles.rowText}>
-        <SypauText variant="label" caps>
+        <SypauText variant="bodyMedium" style={styles.rowTitle}>
           {title}
         </SypauText>
         <SypauText variant="bodySm" color={SypauColor.boneMuted}>
           {description}
         </SypauText>
       </View>
-      <SypauSwitch
-        value={value}
-        onValueChange={onValueChange}
-        tone={tone}
-        accessibilityLabel={title}
-      />
+      <SypauSwitch value={value} onValueChange={onValueChange} tone={tone} accessibilityLabel={title} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  hero: { alignItems: 'center', paddingTop: SypauSpace.xxl * 2, paddingBottom: SypauSpace.xl, marginHorizontal: -SypauSpace.gutter, backgroundColor: SypauColor.surfaceRaised, overflow: 'hidden' },
+  rings: { position: 'absolute', top: -60, alignSelf: 'center' },
+  heroBack: { position: 'absolute', top: SypauSpace.lg, left: SypauSpace.gutter },
+  heroWord: { fontSize: 76, lineHeight: 82 },
+  heroDivider: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.md, marginTop: -SypauSpace.xs },
+  heroRule: { width: 70, height: 1.5, backgroundColor: SypauColor.bone, opacity: 0.8 },
+  heroCaption: { fontSize: 18, letterSpacing: 10, marginTop: SypauSpace.sm, marginLeft: 10 },
+  heroTear: { position: 'absolute', bottom: -1, left: 0, right: 0 },
+
+  group: {
+    backgroundColor: SypauColor.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SypauColor.hairline,
+    borderRadius: SypauRadius.card,
+    overflow: 'hidden',
+  },
+  groupDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: SypauColor.hairline },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SypauSpace.md,
-    paddingVertical: SypauSpace.md,
-    paddingHorizontal: SypauSpace.md,
-    backgroundColor: SypauColor.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: SypauColor.hairline,
-    borderRadius: SypauRadius.chip,
+    paddingVertical: SypauSpace.lg,
+    paddingHorizontal: SypauSpace.lg,
+  },
+  rowArt: { width: 40, alignItems: 'center' },
+  rowEmblem: { width: 40, height: 36 },
+  rowBadge: {
+    position: 'absolute',
+    top: -2,
+    right: 6,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: SypauColor.red,
   },
   rowText: { flex: 1, gap: 2 },
+  rowTitle: { fontSize: 17 },
+  blockRow: { padding: SypauSpace.lg, gap: SypauSpace.xs },
 
   profileChips: {
     flexDirection: 'row',
@@ -449,13 +586,6 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: SypauColor.cyan, borderColor: SypauColor.cyan },
 
   trackingSegmented: { marginTop: SypauSpace.md },
-
-  aboutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SypauSpace.xs,
-  },
 
   pressed: { opacity: 0.75 },
 });
