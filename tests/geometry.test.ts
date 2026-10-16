@@ -9,7 +9,7 @@ import {
   polygonContainsPoint,
   type LatLng,
 } from '@/engine/geo';
-import { simplifyPath } from '@/utils/geometry';
+import { geometriesOverlap, simplifyPath } from '@/utils/geometry';
 import { boundsOf } from '@/utils/map-geo';
 
 const ORIGIN: LatLng = { latitude: 36.7538, longitude: 3.0588 };
@@ -128,6 +128,50 @@ describe('boundsOf', () => {
     expect(haversineDistance({ latitude: north, longitude: ORIGIN.longitude }, ORIGIN)).toBeCloseTo(1000, -1);
     expect(haversineDistance({ latitude: ORIGIN.latitude, longitude: west }, ORIGIN)).toBeCloseTo(1000, -1);
     expect(haversineDistance({ latitude: ORIGIN.latitude, longitude: east }, ORIGIN)).toBeCloseTo(1000, -1);
+  });
+});
+
+describe('geometriesOverlap', () => {
+  const square = { type: 'polygon' as const, points: SQUARE };
+  const shifted = (dLng: number) => ({
+    type: 'polygon' as const,
+    points: SQUARE.map((p) => ({ latitude: p.latitude, longitude: p.longitude + dLng })),
+  });
+
+  it('spots two polygons sharing ground', () => {
+    expect(geometriesOverlap(square, shifted(0.001))).toBe(true);
+  });
+
+  it('leaves apart polygons apart', () => {
+    expect(geometriesOverlap(square, shifted(0.01))).toBe(false);
+  });
+
+  it('counts a zone nested wholly inside another', () => {
+    const inner = { type: 'circle' as const, center: ORIGIN, radiusMeters: 20 };
+    expect(geometriesOverlap(square, inner)).toBe(true);
+    expect(geometriesOverlap(inner, square)).toBe(true);
+  });
+
+  it('catches a cross shape where no vertex is inside the other', () => {
+    const wide = {
+      type: 'polygon' as const,
+      points: [
+        { latitude: 36.7536, longitude: 3.0560 },
+        { latitude: 36.7540, longitude: 3.0560 },
+        { latitude: 36.7540, longitude: 3.0616 },
+        { latitude: 36.7536, longitude: 3.0616 },
+      ],
+    };
+    const tall = {
+      type: 'polygon' as const,
+      points: [
+        { latitude: 36.7520, longitude: 3.0586 },
+        { latitude: 36.7556, longitude: 3.0586 },
+        { latitude: 36.7556, longitude: 3.0590 },
+        { latitude: 36.7520, longitude: 3.0590 },
+      ],
+    };
+    expect(geometriesOverlap(wide, tall)).toBe(true);
   });
 });
 
