@@ -1,13 +1,18 @@
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { DarkCard } from '@/components/sypau/cards';
 import { SypauConfirmDialog, SypauEmptyState } from '@/components/sypau/feedback';
 import { SypauIcon, type SypauIconName } from '@/components/sypau/icon';
 import { SypauScaffold } from '@/components/sypau/scaffold';
 import { SectionTitle, SypauText } from '@/components/sypau/text';
-import { SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
+import { Grain } from '@/components/sypau/texture';
+import { TornEdge } from '@/components/sypau/tornEdge';
+import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { useActivityStore } from '@/state/useActivityStore';
+import { useZoneStore } from '@/state/useZoneStore';
 import type { ActivityEvent, ActivityFilter } from '@/types/event';
 
 const FILTERS: { value: ActivityFilter; label: string }[] = [
@@ -36,6 +41,9 @@ export default function ActivityRoute() {
   const clear = useActivityStore((s) => s.clear);
 
   const [selected, setSelected] = useState<ActivityEvent | null>(null);
+  const [searchOpen, setSearchOpen] = useState(search.length > 0);
+  const zones = useZoneStore((s) => s.zones);
+  const zoneExists = (id: string) => zones.some((zone) => zone.id === id);
   const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
@@ -44,55 +52,67 @@ export default function ActivityRoute() {
 
   const groups = useMemo(() => groupByDay(events), [events]);
 
+  const openEvent = (event: ActivityEvent) => {
+    // Zone events lead somewhere real; everything else explains itself.
+    if (event.category === 'zone' && event.zoneId && zoneExists(event.zoneId)) {
+      router.push({ pathname: '/zones/[id]', params: { id: event.zoneId } });
+      return;
+    }
+    setSelected(event);
+  };
+
   return (
     <SypauScaffold
       title="Activity Log"
+      handTitle
       showBack
       headerRight={
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Clear history"
-          hitSlop={10}
-          onPress={() => setConfirmClear(true)}>
-          <SypauIcon name="trash" size={20} color={SypauColor.boneMuted} />
-        </Pressable>
-      }>
-      <View style={styles.searchRow}>
-        <SypauIcon name="search" size={16} color={SypauColor.boneFaint} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search events"
-          placeholderTextColor={SypauColor.boneFaint}
-          style={styles.searchInput}
-        />
-        {search.length > 0 ? (
-          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setSearch('')}>
-            <SypauIcon name="close" size={16} color={SypauColor.boneMuted} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filters}>
-        {FILTERS.map((entry) => (
+        <View style={styles.headerActions}>
           <Pressable
-            key={entry.value}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: filter === entry.value }}
-            onPress={() => setFilter(entry.value)}
-            style={[styles.filterChip, filter === entry.value && styles.filterChipSelected]}>
-            <SypauText
-              variant="label"
-              color={filter === entry.value ? SypauColor.bone : SypauColor.boneMuted}>
-              {entry.label}
-            </SypauText>
+            accessibilityRole="button"
+            accessibilityLabel={searchOpen ? 'Close search' : 'Search events'}
+            hitSlop={10}
+            onPress={() => {
+              if (searchOpen) setSearch('');
+              setSearchOpen((open) => !open);
+            }}>
+            <SypauIcon name={searchOpen ? 'close' : 'search'} size={20} color={SypauColor.boneMuted} />
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear history"
+            hitSlop={10}
+            onPress={() => setConfirmClear(true)}>
+            <SypauIcon name="trash" size={20} color={SypauColor.boneMuted} />
+          </Pressable>
+        </View>
+      }>
+      {searchOpen ? (
+        <View style={styles.searchRow}>
+          <SypauIcon name="search" size={16} color={SypauColor.boneFaint} />
+          <TextInput
+            autoFocus
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search events"
+            placeholderTextColor={SypauColor.boneFaint}
+            style={styles.searchInput}
+            returnKeyType="search"
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {FILTERS.map((entry, index) => (
+          <TornTab
+            key={entry.value}
+            label={entry.label}
+            selected={filter === entry.value}
+            seed={index * 7 + 3}
+            onPress={() => setFilter(entry.value)}
+          />
         ))}
-      </ScrollView>
+      </View>
 
       {events.length === 0 ? (
         <SypauEmptyState
@@ -108,36 +128,57 @@ export default function ActivityRoute() {
           <View key={group.label} style={styles.group}>
             <SectionTitle>{group.label}</SectionTitle>
 
-            {group.events.map((event) => (
-              <Pressable
-                key={event.id}
-                accessibilityRole="button"
-                onPress={() => setSelected(event)}
-                style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}>
-                <View style={[styles.eventIcon, { borderColor: severityColor(event.severity) }]}>
-                  <SypauIcon
-                    name={CATEGORY_ICONS[event.category]}
-                    size={17}
-                    color={severityColor(event.severity)}
-                  />
-                </View>
+            {group.events.map((event) => {
+              const mark = trailingMark(event, zoneExists);
+              return (
+                <Pressable
+                  key={event.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${event.title}. ${event.description ?? ''} ${formatTime(event.timestamp)}`}
+                  onPress={() => openEvent(event)}
+                  style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}>
+                  <View style={[styles.eventIcon, { borderColor: severityColor(event.severity) }]}>
+                    {event.category === 'profile' && event.severity !== 'warning' ? (
+                      <Image source={SypauAsset.emblem} style={styles.eventEmblem} contentFit="contain" />
+                    ) : (
+                      <SypauIcon
+                        name={CATEGORY_ICONS[event.category]}
+                        size={18}
+                        color={severityColor(event.severity)}
+                      />
+                    )}
+                  </View>
 
-                <View style={styles.eventText}>
-                  <SypauText variant="bodyMedium" style={styles.eventTitle}>
-                    {event.title}
-                  </SypauText>
-                  {event.description ? (
-                    <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-                      {event.description}
-                    </SypauText>
-                  ) : null}
-                </View>
+                  <View style={styles.eventText}>
+                    <View style={styles.eventTitleRow}>
+                      <SypauText variant="bodyMedium" style={styles.eventTitle} numberOfLines={1}>
+                        {event.title}
+                      </SypauText>
+                      <SypauText variant="bodySm" color={SypauColor.boneFaint}>
+                        {formatTime(event.timestamp)}
+                      </SypauText>
+                    </View>
+                    {event.description ? (
+                      <SypauText variant="bodySm" color={SypauColor.boneMuted} numberOfLines={2}>
+                        {event.description}
+                      </SypauText>
+                    ) : null}
+                  </View>
 
-                <SypauText variant="bodySm" color={SypauColor.boneFaint}>
-                  {formatTime(event.timestamp)}
-                </SypauText>
-              </Pressable>
-            ))}
+                  <View style={styles.mark}>
+                    {mark === 'chevron' ? (
+                      <SypauIcon name="chevron" size={22} color={SypauColor.boneMuted} />
+                    ) : mark === 'blocked' ? (
+                      <SypauIcon name="lock" size={20} color={SypauColor.amber} />
+                    ) : mark === 'error' ? (
+                      <SypauIcon name="close" size={24} color={SypauColor.red} />
+                    ) : (
+                      <SypauIcon name="info" size={18} color={SypauColor.boneFaint} />
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         ))
       )}
@@ -172,6 +213,58 @@ export default function ActivityRoute() {
         }}
       />
     </SypauScaffold>
+  );
+}
+
+/** What the row's trailing mark says about the event, per the activity reference. */
+function trailingMark(
+  event: ActivityEvent,
+  zoneExists: (id: string) => boolean
+): 'chevron' | 'blocked' | 'error' | 'detail' {
+  if (event.severity === 'error') return 'error';
+  if (event.severity === 'warning') return 'blocked';
+  if (event.category === 'zone' && event.zoneId && zoneExists(event.zoneId)) return 'chevron';
+  return 'detail';
+}
+
+/**
+ * A filter tab cut from card stock: ragged top and bottom, red when chosen,
+ * as on the activity reference.
+ */
+function TornTab({
+  label,
+  selected,
+  seed,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  seed: number;
+  onPress: () => void;
+}) {
+  const [width, setWidth] = useState(0);
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={[styles.tab, selected && styles.tabSelected]}>
+      <Grain opacity={selected ? 0.2 : 0.14} />
+      <View style={styles.tabTearTop}>
+        <TornEdge width={width} color={SypauColor.ink} facing="up" seed={seed} height={5} />
+      </View>
+      <SypauText
+        variant="bodyMedium"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        color={selected ? SypauColor.bone : SypauColor.boneMuted}>
+        {label}
+      </SypauText>
+      <View style={styles.tabTearBottom}>
+        <TornEdge width={width} color={SypauColor.ink} facing="down" seed={seed + 11} height={5} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -249,19 +342,21 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: SypauColor.bone, paddingVertical: SypauSpace.md },
 
-  // A horizontal ScrollView has no intrinsic height, so in a column parent it
-  // stretches to fill and the chips become full-height bars.
-  filterScroll: { flexGrow: 0 },
-  filters: { gap: SypauSpace.sm, paddingRight: SypauSpace.gutter, alignItems: 'center' },
-  filterChip: {
-    borderRadius: SypauRadius.chip,
-    paddingHorizontal: SypauSpace.lg,
-    paddingVertical: SypauSpace.sm,
-    backgroundColor: SypauColor.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: SypauColor.hairline,
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.lg },
+
+  tabs: { flexDirection: 'row', gap: SypauSpace.xs },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SypauSpace.md,
+    paddingHorizontal: 2,
+    backgroundColor: SypauColor.surfaceRaised,
+    overflow: 'hidden',
   },
-  filterChipSelected: { backgroundColor: SypauColor.red, borderColor: SypauColor.red },
+  tabSelected: { backgroundColor: SypauColor.red },
+  tabTearTop: { position: 'absolute', top: 0, left: 0, right: 0 },
+  tabTearBottom: { position: 'absolute', bottom: 0, left: 0, right: 0 },
 
   group: { gap: SypauSpace.xs },
   eventRow: {
@@ -279,9 +374,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: SypauColor.surface,
   },
+  eventEmblem: { width: 30, height: 26 },
   eventText: { flex: 1, gap: 2 },
-  eventTitle: { color: SypauColor.bone },
+  eventTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: SypauSpace.sm },
+  eventTitle: { flex: 1, color: SypauColor.bone },
+  mark: { width: 26, alignItems: 'center' },
 
   detailRow: {
     flexDirection: 'row',
