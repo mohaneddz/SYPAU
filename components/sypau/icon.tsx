@@ -56,6 +56,7 @@ export type SypauIconName =
   | 'layers'
   | 'zap'
   | 'refresh'
+  | 'undo'
   | 'lock';
 
 export type Glyph = { set: 'feather' | 'material'; name: string };
@@ -121,6 +122,7 @@ export const GLYPHS: Record<SypauIconName, Glyph> = {
   layers: { set: 'feather', name: 'layers' },
   zap: { set: 'feather', name: 'zap' },
   refresh: { set: 'feather', name: 'refresh-cw' },
+  undo: { set: 'feather', name: 'rotate-ccw' },
   lock: { set: 'feather', name: 'lock' },
 };
 
