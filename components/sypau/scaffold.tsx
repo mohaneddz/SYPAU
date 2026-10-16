@@ -12,7 +12,7 @@ import { SypauColor, SypauSpace } from '@/constants/sypau';
 type ScaffoldProps = {
   children: ReactNode;
   title?: string;
-  wordmark?: boolean;
+  wordmark?: boolean | 'hero';
   showBack?: boolean;
   onBack?: () => void;
   headerRight?: ReactNode;
