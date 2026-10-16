@@ -12,7 +12,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SYPAU_MAP_STYLE } from '@/constants/map-style';
 import { SypauColor } from '@/constants/sypau';
 import { circlePolygonPoints, type Geometry, type LatLng } from '@/engine/geo';
-import { pointsToLngLatRing, toLngLat } from '@/utils/map-geo';
+import { boundsOf, pointsToLngLatRing, toLngLat } from '@/utils/map-geo';
 
 /** A zone's outline as a closed ring, whatever shape it was drawn as. */
 export function geometryToRing(geometry: Geometry): LatLng[] {
@@ -20,19 +20,6 @@ export function geometryToRing(geometry: Geometry): LatLng[] {
     return circlePolygonPoints(geometry.center, geometry.radiusMeters, 64);
   }
   return geometry.points;
-}
-
-export function geometryCenter(geometry: Geometry): LatLng {
-  if (geometry.type === 'circle') return geometry.center;
-
-  const points = geometry.points;
-  if (points.length === 0) return { latitude: 0, longitude: 0 };
-
-  const sum = points.reduce(
-    (acc, p) => ({ latitude: acc.latitude + p.latitude, longitude: acc.longitude + p.longitude }),
-    { latitude: 0, longitude: 0 }
-  );
-  return { latitude: sum.latitude / points.length, longitude: sum.longitude / points.length };
 }
 
 type BoundaryProps = {
@@ -79,6 +66,8 @@ export function ZoneBoundary({ id, geometry, muted = false }: BoundaryProps) {
 export type ZoneMapHandle = {
   flyTo: (point: LatLng, zoom?: number) => void;
   zoomBy: (delta: number) => void;
+  /** Frames every zone on the map, e.g. after the list changes. */
+  fitAll: () => void;
 };
 
 type ZoneMapProps = {
@@ -92,6 +81,12 @@ type ZoneMapProps = {
   onPress?: (point: LatLng) => void;
   /** Kept in a ref so the map isn't re-rendered just to recentre it. */
   controlRef?: React.MutableRefObject<ZoneMapHandle | null>;
+  /**
+   * Inset, in points, between the zones and the map edge when the camera frames
+   * them. Thumbnails want the shape to fill the frame; full maps want room for
+   * the controls laid over them.
+   */
+  fitPadding?: number;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
 };
@@ -108,14 +103,27 @@ export function ZoneMap({
   interactive = true,
   onPress,
   controlRef,
+  fitPadding = 18,
   style,
   children,
 }: ZoneMapProps) {
   const cameraRef = useRef<CameraRef>(null);
   const zoomRef = useRef(zoom);
 
-  const cameraCenter =
-    center ?? (geometries[0] ? geometryCenter(geometries[0].geometry) : null) ?? userLocation;
+  // A fixed zoom frames a 100 m zone and a 3 km one identically, so one is a
+  // speck and the other overflows. Framing by bounds gives every zone its frame.
+  const bounds = useMemo(
+    () => (center ? null : boundsOf(geometries.map((entry) => entry.geometry))),
+    [center, geometries]
+  );
+  const padding = useMemo(
+    () => ({ top: fitPadding, right: fitPadding, bottom: fitPadding, left: fitPadding }),
+    [fitPadding]
+  );
+  const boundsRef = useRef(bounds);
+  boundsRef.current = bounds;
+
+  const cameraCenter = center ?? userLocation;
 
   useEffect(() => {
     if (!controlRef) return;
@@ -133,8 +141,12 @@ export function ZoneMap({
         zoomRef.current = Math.min(20, Math.max(2, zoomRef.current + delta));
         cameraRef.current?.zoomTo(zoomRef.current, { duration: 250 });
       },
+      fitAll: () => {
+        if (!boundsRef.current) return;
+        cameraRef.current?.fitBounds(boundsRef.current, { padding, duration: 600 });
+      },
     };
-  }, [controlRef]);
+  }, [controlRef, padding]);
 
   return (
     <View style={[styles.map, style]}>
@@ -160,8 +172,13 @@ export function ZoneMap({
         }>
         <Camera
           ref={cameraRef}
+          maxZoom={19}
           initialViewState={
-            cameraCenter ? { center: toLngLat(cameraCenter), zoom } : { zoom }
+            bounds
+              ? { bounds, padding }
+              : cameraCenter
+                ? { center: toLngLat(cameraCenter), zoom }
+                : { zoom }
           }
         />
 
