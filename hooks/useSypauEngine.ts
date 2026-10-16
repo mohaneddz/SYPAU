@@ -130,6 +130,10 @@ export function useSypauEngine(): void {
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
 
+    // The watch below can take a full interval to deliver its first position,
+    // which leaves every screen saying "waiting for a fix" right after launch.
+    void refreshLocation();
+
     (async () => {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted' || cancelled) return;

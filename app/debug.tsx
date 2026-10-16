@@ -15,7 +15,7 @@ import { isNativeAvailable } from '@/core/nativeBridge';
 import { isLocationUpdatesRunning } from '@/core/monitoring';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { listEvents } from '@/db/events';
-import { distanceToGeometry } from '@/engine/geo';
+import { distanceToEdge } from '@/engine/geo';
 import { refreshLocation } from '@/hooks/useSypauEngine';
 import { useEngineStore } from '@/state/useEngineStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
@@ -44,8 +44,30 @@ export default function DebugRoute() {
   }, [refreshNativeState]);
 
   const activeZone = zones.find((zone) => zone.id === engine.activeZoneId) ?? null;
+  // Inside, the edge of the zone you're in; outside, the closest edge you could
+  // cross into. "—" only when there's nothing to measure against.
+  const measuredZone =
+    activeZone ??
+    (fix
+      ? zones
+          .filter((zone) => zone.enabled)
+          .reduce<(typeof zones)[number] | null>((closest, zone) => {
+            if (!closest) return zone;
+            return distanceToEdge(fix.point, zone.geometry) <
+              distanceToEdge(fix.point, closest.geometry)
+              ? zone
+              : closest;
+          }, null)
+      : null);
   const distanceToBoundary =
-    fix && activeZone ? distanceToGeometry(fix.point, activeZone.geometry) : null;
+    fix && measuredZone ? distanceToEdge(fix.point, measuredZone.geometry) : null;
+  // Balanced and saver modes lean on platform geofencing alone, so a stopped
+  // location service with fences armed is the healthy state, not a failure.
+  const backgroundState = monitoring.running
+    ? 'Active'
+    : monitoring.registeredGeofences > 0
+      ? 'Geofencing'
+      : 'Stopped';
 
   const runSelfTest = useCallback(async () => {
     const locationUpdatesRunning = await isLocationUpdatesRunning();
@@ -190,7 +212,7 @@ export default function DebugRoute() {
         <Metric label="Active zone" value={activeZone?.name ?? 'None'} />
         <Metric label="Status" value={activeZone ? 'Inside' : 'Outside'} highlight />
         <Metric
-          label="Distance to boundary"
+          label={activeZone || !measuredZone ? 'Distance to boundary' : `Nearest: ${measuredZone.name}`}
           value={distanceToBoundary !== null ? formatDistance(distanceToBoundary) : '—'}
         />
         <Metric label="Matching zones" value={String(engine.matchedZoneIds.length)} />
@@ -209,7 +231,11 @@ export default function DebugRoute() {
               Background
             </SypauText>
           </View>
-          <Metric label="State" value={monitoring.running ? 'Active' : 'Stopped'} highlight />
+          <Metric
+            label="State"
+            value={backgroundState}
+            highlight={backgroundState !== 'Stopped'}
+          />
           <Metric label="Mode" value={settings.trackingMode} />
           <Metric label="Since" value={formatDuration(monitoring.startedAt)} />
           <Metric label="Updates" value={String(monitoring.updateCount)} />
@@ -223,7 +249,11 @@ export default function DebugRoute() {
             </SypauText>
           </View>
           <Metric label="Native bridge" value={isNativeAvailable() ? 'Running' : 'Absent'} highlight />
-          <Metric label="Geofence monitor" value={monitoring.running ? 'Running' : 'Idle'} />
+          <Metric
+            label="Geofences"
+            value={monitoring.registeredGeofences > 0 ? 'Armed' : 'Idle'}
+            highlight={monitoring.registeredGeofences > 0}
+          />
           <Metric label="Database" value="Running" />
           <Metric label="Last heartbeat" value={formatAgo(monitoring.lastHeartbeatAt)} />
         </DarkCard>
@@ -344,10 +374,13 @@ function Metric({
 }) {
   return (
     <View style={styles.metric}>
-      <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+      <SypauText variant="bodySm" color={SypauColor.boneMuted} numberOfLines={1}>
         {label}
       </SypauText>
-      <SypauText variant="bodySm" color={highlight ? SypauColor.cyan : SypauColor.bone}>
+      <SypauText
+        variant="bodySm"
+        color={highlight ? SypauColor.cyan : SypauColor.bone}
+        style={styles.metricValue}>
         {value}
       </SypauText>
     </View>
@@ -395,6 +428,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     gap: SypauSpace.md,
   },
+  // A long value, like the list of held controls, wraps under itself instead of
+  // pushing past the card edge.
+  metricValue: { flexShrink: 1, textAlign: 'right' },
 
   // Align to the top: a wrapped message shouldn't drag the timestamp and dot
   // down to the middle of the row.

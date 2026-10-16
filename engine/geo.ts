@@ -113,6 +113,18 @@ export function distanceToGeometry(point: LatLng, geometry: Geometry): number {
   return distanceToPolygonBorder(point, geometry.points);
 }
 
+/**
+ * Metres to the boundary line from either side. Unlike `distanceToGeometry`,
+ * being inside doesn't collapse this to zero — it's how far you are from
+ * crossing out.
+ */
+export function distanceToEdge(point: LatLng, geometry: Geometry): number {
+  if (geometry.type === 'circle') {
+    return Math.abs(haversineDistance(point, geometry.center) - geometry.radiusMeters);
+  }
+  return distanceToPolygonBorder(point, geometry.points);
+}
+
 /** Rough area of a Geometry in square meters. */
 export function geometryArea(geometry: Geometry): number {
   if (geometry.type === 'circle') {
