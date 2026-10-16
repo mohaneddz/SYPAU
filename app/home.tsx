@@ -221,7 +221,14 @@ function StateCard({
             {zoneName ?? 'No active zone'}
           </SypauText>
 
-          <SypauText variant="hand" caps color={stateColor} style={styles.stateWord}>
+          <SypauText
+            variant="hand"
+            caps
+            color={stateColor}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+            style={styles.stateWord}>
             {state}
           </SypauText>
           <HandUnderline width={130} color={SypauColor.cyan} />

@@ -93,6 +93,15 @@ export async function refreshLocation({ forced = false }: { forced?: boolean } =
       return;
     }
 
+    // A fresh fix can take seconds to arrive, or never on a cold radio. The
+    // last known position paints the map and the zone state straight away and
+    // the real fix replaces it when it lands. Forced refreshes skip this: the
+    // user is asking precisely because they don't trust what's cached.
+    if (!forced) {
+      const cached = await Location.getLastKnownPositionAsync({ maxAge: 10 * 60_000 });
+      if (cached && !useEngineStore.getState().fix) recordFix(cached);
+    }
+
     const position = await Location.getCurrentPositionAsync({
       accuracy: forced ? Location.Accuracy.Highest : Location.Accuracy.Balanced,
     });
