@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 import { startZoneMonitoring, stopZoneMonitoring, syncGeofences } from '@/core/monitoring';
 import { setStartOnBoot, subscribeToSystemEvents } from '@/core/nativeBridge';
 import { applyTransition, resolveActiveZone } from '@/core/zoneEngine';
+import { saveEngineState } from '@/db/engineState';
 import { getZone } from '@/db/zones';
 import { useActivityStore } from '@/state/useActivityStore';
 import { useEngineStore } from '@/state/useEngineStore';
@@ -47,6 +48,7 @@ function evaluate(point: { latitude: number; longitude: number }) {
   });
 
   useEngineStore.getState().setEngine(nextState);
+  saveEngineState(nextState);
   // Handed over so a background wake-up continues from what the UI knew
   // rather than rebuilding ownership from nothing.
   seedBackgroundState(nextState);
@@ -72,6 +74,46 @@ function recordFix(position: Location.LocationObject) {
   });
 
   evaluate(point);
+}
+
+/** How long Balanced gets before GPS is asked as well. */
+const BALANCED_GRACE_MS = 6_000;
+
+/**
+ * Balanced leans on Wi-Fi and cell positioning. Where there's neither — no
+ * signal, airplane mode, an emulator — it can wait indefinitely, so after a
+ * grace period GPS is asked too and whichever answers first wins.
+ */
+function balancedFixWithFallback(): Promise<Location.LocationObject> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let failures = 0;
+    const settle = (position: Location.LocationObject) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(position);
+    };
+    const fail = (error: unknown) => {
+      failures += 1;
+      if (failures === 2 && !settled) reject(error);
+    };
+
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(settle, (error) => {
+      fail(error);
+      // No point waiting out the grace period for a request that's already lost.
+      clearTimeout(timer);
+      if (!settled) startHigh();
+    });
+
+    let highStarted = false;
+    const startHigh = () => {
+      if (highStarted) return;
+      highStarted = true;
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).then(settle, fail);
+    };
+    const timer = setTimeout(startHigh, BALANCED_GRACE_MS);
+  });
 }
 
 /**
@@ -102,9 +144,9 @@ export async function refreshLocation({ forced = false }: { forced?: boolean } =
       if (cached && !useEngineStore.getState().fix) recordFix(cached);
     }
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: forced ? Location.Accuracy.Highest : Location.Accuracy.Balanced,
-    });
+    const position = forced
+      ? await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest })
+      : await balancedFixWithFallback();
     recordFix(position);
 
     if (forced) {
