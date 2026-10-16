@@ -83,10 +83,14 @@ export function boundingCircle(points: LatLng[]): { center: LatLng; radiusMeters
   return { center, radiusMeters };
 }
 
-/** Human-readable area: m² below a hectare, km² above. */
+/**
+ * Human-readable area: m² below a hectare, km² above. Kept short enough to sit
+ * on one line of a half-width card — "248,792 m²" doesn't, "0.25 km²" does.
+ */
 export function formatArea(squareMeters: number): string {
-  if (squareMeters < 1_000_000) return `${Math.round(squareMeters).toLocaleString()} m²`;
-  return `${(squareMeters / 1_000_000).toFixed(1)} km²`;
+  if (squareMeters < 10_000) return `${Math.round(squareMeters).toLocaleString()} m²`;
+  const km = squareMeters / 1_000_000;
+  return `${km < 10 ? km.toFixed(2) : km.toFixed(1)} km²`;
 }
 
 /** Human-readable distance: metres below a kilometre, km above. */
