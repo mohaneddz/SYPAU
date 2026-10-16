@@ -199,7 +199,7 @@ function StateCard({
     ? 'Automation is off.\nNothing will change on its own.'
     : zoneName
       ? 'You’re inside your zone.\nSilence is in control.'
-      : 'No zone claims you right now.\nYour phone is yours.';
+      : 'No zone claims you.\nYour phone is yours.';
 
   return (
     <View style={styles.stateCard}>
