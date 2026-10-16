@@ -93,7 +93,7 @@ export default function HomeRoute() {
         <Grain opacity={0.2} />
         <Image source={SypauAsset.emblem} style={styles.bannerEmblem} contentFit="contain" />
         <View style={styles.bannerText}>
-          <SypauText variant="cardTitle" caps color={SypauColor.bone}>
+          <SypauText variant="hand" caps color={SypauColor.bone} style={styles.bannerTitle}>
             Create Zone
           </SypauText>
           <SypauText variant="labelSm" caps color="rgba(236,234,230,0.82)">
@@ -277,11 +277,14 @@ function EffectsStrip({
     <PaperCard seed={17} contentStyle={styles.stripContent}>
       {items.map((item, index) => (
         <View key={item.label} style={[styles.stripItem, index > 0 && styles.stripDivider]}>
-          <SypauIcon
-            name={item.muted ? (item.icon === 'phone' ? 'phoneOff' : 'volumeOff') : item.icon}
-            size={22}
-            color={SypauColor.paperInk}
-          />
+          <View>
+            <SypauIcon name={item.icon} size={24} color={SypauColor.paperInk} />
+            {item.muted ? (
+              <View style={styles.mutedBadge}>
+                <SypauIcon name="close" size={8} color={SypauColor.bone} />
+              </View>
+            ) : null}
+          </View>
           <View>
             <SypauText variant="labelSm" caps color={SypauColor.paperInk}>
               {item.label}
@@ -454,6 +457,18 @@ const styles = StyleSheet.create({
     gap: SypauSpace.sm,
     paddingHorizontal: SypauSpace.sm,
   },
+  // The small red cross the reference pins to a muted category's icon.
+  mutedBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -3,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: SypauColor.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   stripDivider: {
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: 'rgba(20,20,18,0.25)',
@@ -471,6 +486,7 @@ const styles = StyleSheet.create({
   },
   bannerEmblem: { width: 42, height: 42 },
   bannerText: { flex: 1 },
+  bannerTitle: { fontSize: 34, lineHeight: 36 },
 
   summaryRow: { flexDirection: 'row', gap: SypauSpace.md },
   summaryCard: { flex: 1, gap: SypauSpace.sm },

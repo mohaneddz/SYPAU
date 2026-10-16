@@ -80,7 +80,7 @@ export function HeroWordmark({ caption }: { caption?: string }) {
 type HeaderProps = {
   title?: string;
   /** Shows the SYPAU wordmark instead of a plain title. */
-  wordmark?: boolean | 'hero';
+  wordmark?: boolean;
   showBack?: boolean;
   onBack?: () => void;
   /** Replaces the default hand emblem on the right. */
@@ -110,8 +110,8 @@ export function SypauHeader({ title, wordmark = false, showBack = false, onBack,
       </View>
 
       <View style={styles.center}>
-        {wordmark === 'hero' ? <HeroWordmark /> : <RedCross size={16} />}
-        {wordmark === 'hero' ? null : wordmark ? (
+        <RedCross size={16} />
+        {wordmark ? (
           <SypauText variant="displaySm" caps style={styles.wordmark}>
             SYPAU
           </SypauText>

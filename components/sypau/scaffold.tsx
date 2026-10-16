@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BOTTOM_NAV_CLEARANCE, SypauBottomNav } from '@/components/sypau/bottomNav';
 import { CreateSheet } from '@/components/sypau/createSheet';
-import { SypauHeader } from '@/components/sypau/header';
+import { HeroWordmark, SypauHeader } from '@/components/sypau/header';
 import { Grain } from '@/components/sypau/texture';
 import { SypauColor, SypauSpace } from '@/constants/sypau';
 
@@ -40,8 +40,20 @@ export function SypauScaffold({
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
 
+  // The poster wordmark scrolls with the page, as in the reference; pinned in
+  // the header it would hold a quarter of the screen through every scroll.
+  const hero = wordmark === 'hero';
+
   const body = (
-    <View style={[styles.content, !showNav && styles.contentNoNav, contentStyle]}>{children}</View>
+    <View style={[styles.content, !showNav && styles.contentNoNav, contentStyle]}>
+      {hero ? (
+        <View style={styles.heroHeader}>
+          <HeroWordmark />
+          {headerRight ? <View style={styles.heroRight}>{headerRight}</View> : null}
+        </View>
+      ) : null}
+      {children}
+    </View>
   );
 
   return (
@@ -49,7 +61,7 @@ export function SypauScaffold({
       <Grain opacity={0.1} />
 
       <View style={{ paddingTop: insets.top }}>
-        {showHeader ? (
+        {showHeader && !hero ? (
           <SypauHeader
             title={title}
             wordmark={wordmark}
@@ -100,4 +112,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   contentNoNav: { paddingBottom: SypauSpace.xl },
+  heroHeader: { alignItems: 'center', paddingTop: SypauSpace.lg },
+  heroRight: { position: 'absolute', right: 0, top: SypauSpace.xl + SypauSpace.sm },
 });
