@@ -32,7 +32,10 @@ function tearPath(width: number, height: number, seed: number, facing: 'up' | 'd
     points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
   }
 
-  const close = facing === 'down' ? `L${width},0 L0,0 Z` : `L${width},${height} L0,${height} Z`;
+  // The ink fills the side *away* from the card: above a top tear, below a
+  // bottom one. Filling toward the card paints over the paper and leaves a
+  // sliver of it showing beyond the tear, which reads as a black band.
+  const close = facing === 'down' ? `L${width},${height} L0,${height} Z` : `L${width},0 L0,0 Z`;
   return `M${points.join(' L')} ${close}`;
 }
 
