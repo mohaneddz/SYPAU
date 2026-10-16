@@ -1,6 +1,7 @@
+import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -15,7 +16,7 @@ import { HandUnderline, SypauHeader } from '@/components/sypau/header';
 import { SypauIcon } from '@/components/sypau/icon';
 import { SectionTitle, SypauText } from '@/components/sypau/text';
 import { Grain } from '@/components/sypau/texture';
-import { SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
+import { SypauColor, SypauFont, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { useEngineStore } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useZoneStore } from '@/state/useZoneStore';
@@ -185,7 +186,13 @@ export function ZoneForm({ existing }: ZoneFormProps) {
             maxLength={NAME_LIMIT}
           />
           {name.length > 0 ? (
-            <SypauIcon name="close" size={20} color={SypauColor.paperInk} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear zone name"
+              hitSlop={12}
+              onPress={() => setName('')}>
+              <SypauIcon name="close" size={22} color={SypauColor.paperInk} />
+            </Pressable>
           ) : null}
         </PaperCard>
         <SypauText variant="bodySm" color={SypauColor.boneFaint} align="right">
@@ -382,14 +389,17 @@ function StepButton({
   onPress: () => void;
 }) {
   return (
-    <View
-      accessible
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      onTouchEnd={onPress}
-      style={styles.stepButton}>
+      hitSlop={6}
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      style={({ pressed }) => [styles.stepButton, pressed && styles.stepButtonPressed]}>
       <SypauIcon name={icon} size={16} />
-    </View>
+    </Pressable>
   );
 }
 
@@ -448,12 +458,18 @@ function OptionRow({
   onPress: () => void;
 }) {
   return (
-    <View
-      accessible
+    <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected }}
-      onTouchEnd={onPress}
-      style={[styles.optionRow, selected && styles.optionRowSelected]}>
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.optionRow,
+        selected && styles.optionRowSelected,
+        pressed && styles.optionRowPressed,
+      ]}>
       <SypauIcon
         name={selected ? 'check' : (icon ?? 'chevron')}
         size={18}
@@ -469,7 +485,7 @@ function OptionRow({
           </SypauText>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -484,9 +500,10 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: SypauColor.paperInk,
-    fontSize: 20,
-    fontStyle: 'italic',
-    paddingVertical: SypauSpace.sm,
+    // The reference writes the name by hand on the paper strip.
+    fontFamily: SypauFont.hand,
+    fontSize: 26,
+    paddingVertical: SypauSpace.xs,
   },
 
   exitOptions: { gap: SypauSpace.xs },
@@ -503,6 +520,7 @@ const styles = StyleSheet.create({
     backgroundColor: SypauColor.surface,
   },
   optionRowSelected: { borderColor: SypauColor.cyanDim, backgroundColor: SypauColor.surfaceRaised },
+  optionRowPressed: { opacity: 0.8 },
   optionText: { flex: 1 },
 
   stepper: {
@@ -523,6 +541,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stepButtonPressed: { backgroundColor: SypauColor.surfaceRaised },
 
   enabledRow: {
     flexDirection: 'row',
