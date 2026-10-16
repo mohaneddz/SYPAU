@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { startZoneMonitoring, stopZoneMonitoring, syncGeofences } from '@/core/monitoring';
@@ -14,90 +14,116 @@ import { useZoneStore } from '@/state/useZoneStore';
 import { seedBackgroundState } from '@/tasks/locationTask';
 
 /**
- * Drives the automation while the UI is open.
+ * Dwell timers survive screen changes. They used to live in a ref per hook
+ * instance, so each screen that mounted the engine kept its own clock.
+ */
+let dwellSince: Record<string, number> = {};
+
+function evaluate(point: { latitude: number; longitude: number }) {
+  const settings = useSettingsStore.getState().settings;
+  const zones = useZoneStore.getState().zones;
+  const profiles = useProfileStore.getState().profiles;
+  const engineState = useEngineStore.getState().engine;
+
+  const previousActiveZone = engineState.activeZoneId ? getZone(engineState.activeZoneId) : null;
+
+  const outcome = resolveActiveZone({
+    position: point,
+    zones,
+    profiles,
+    settings,
+    state: engineState,
+    dwellSince,
+  });
+
+  dwellSince = outcome.dwellSince;
+
+  const nextState = applyTransition({
+    outcome,
+    previousActiveZone,
+    profiles,
+    settings,
+    state: engineState,
+  });
+
+  useEngineStore.getState().setEngine(nextState);
+  // Handed over so a background wake-up continues from what the UI knew
+  // rather than rebuilding ownership from nothing.
+  seedBackgroundState(nextState);
+
+  if (outcome.profileChanged) {
+    useActivityStore.getState().load();
+  }
+}
+
+function recordFix(position: Location.LocationObject) {
+  const point = {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+  };
+
+  useEngineStore.getState().setFix({
+    point,
+    accuracyMeters: position.coords.accuracy,
+    speedMetersPerSecond: position.coords.speed,
+    headingDegrees: position.coords.heading,
+    timestamp: position.timestamp,
+    provider: position.mocked ? 'mock' : 'fused',
+  });
+
+  evaluate(point);
+}
+
+/**
+ * Take one fix and run it through the engine.
+ *
+ * `forced` is the debug screen's "force location update": the user asked for
+ * the truth right now, so it powers up GPS instead of accepting whatever cached
+ * network position Balanced would hand back.
+ */
+export async function refreshLocation({ forced = false }: { forced?: boolean } = {}) {
+  try {
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      useEngineStore.getState().pushDiagnostic({
+        message: 'No location permission',
+        detail: 'Grant precise location to take a fix.',
+        severity: 'warning',
+      });
+      return;
+    }
+
+    const position = await Location.getCurrentPositionAsync({
+      accuracy: forced ? Location.Accuracy.Highest : Location.Accuracy.Balanced,
+    });
+    recordFix(position);
+
+    if (forced) {
+      useEngineStore.getState().pushDiagnostic({
+        message: 'Location update received',
+        detail:
+          position.coords.accuracy != null ? `${Math.round(position.coords.accuracy)} m acc.` : null,
+        severity: 'info',
+      });
+    }
+  } catch (error) {
+    useEngineStore.getState().pushDiagnostic({
+      message: 'Couldn’t get a location fix',
+      detail: error instanceof Error ? error.message : null,
+      severity: 'warning',
+    });
+  }
+}
+
+/**
+ * Drives the automation while the UI is open. Mounted once, at the root.
  *
  * The background task owns the same engine when the app isn't running; this
  * hook exists so the visible state stays live and transitions are reflected
- * immediately rather than on next launch.
+ * immediately rather than on next launch. Mounting it per screen started
+ * monitoring and subscribed to system events once per screen on the stack.
  */
-export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
-  const dwellRef = useRef<Record<string, number>>({});
-
-  const evaluate = useCallback(
-    (point: { latitude: number; longitude: number }) => {
-      const settings = useSettingsStore.getState().settings;
-      const zones = useZoneStore.getState().zones;
-      const profiles = useProfileStore.getState().profiles;
-      const engineState = useEngineStore.getState().engine;
-
-      const previousActiveZone = engineState.activeZoneId
-        ? getZone(engineState.activeZoneId)
-        : null;
-
-      const outcome = resolveActiveZone({
-        position: point,
-        zones,
-        profiles,
-        settings,
-        state: engineState,
-        dwellSince: dwellRef.current,
-      });
-
-      dwellRef.current = outcome.dwellSince;
-
-      const nextState = applyTransition({
-        outcome,
-        previousActiveZone,
-        profiles,
-        settings,
-        state: engineState,
-      });
-
-      useEngineStore.getState().setEngine(nextState);
-      // Handed over so a background wake-up continues from what the UI knew
-      // rather than rebuilding ownership from nothing.
-      seedBackgroundState(nextState);
-
-      if (outcome.profileChanged) {
-        useActivityStore.getState().load();
-      }
-    },
-    []
-  );
-
-  const refreshLocation = useCallback(async () => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const point = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      };
-
-      useEngineStore.getState().setFix({
-        point,
-        accuracyMeters: position.coords.accuracy,
-        speedMetersPerSecond: position.coords.speed,
-        headingDegrees: position.coords.heading,
-        timestamp: position.timestamp,
-        provider: position.mocked ? 'mock' : 'fused',
-      });
-
-      evaluate(point);
-    } catch (error) {
-      useEngineStore.getState().pushDiagnostic({
-        message: 'Couldn’t get a location fix',
-        detail: error instanceof Error ? error.message : null,
-        severity: 'warning',
-      });
-    }
-  }, [evaluate]);
-
+export function useSypauEngine(): void {
   // Foreground position watch. Separate from the background task so the UI
   // updates smoothly without raising the background cadence.
   useEffect(() => {
@@ -110,23 +136,7 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
 
       subscription = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.Balanced, timeInterval: 15_000, distanceInterval: 20 },
-        (position) => {
-          const point = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          };
-
-          useEngineStore.getState().setFix({
-            point,
-            accuracyMeters: position.coords.accuracy,
-            speedMetersPerSecond: position.coords.speed,
-            headingDegrees: position.coords.heading,
-            timestamp: position.timestamp,
-            provider: position.mocked ? 'mock' : 'fused',
-          });
-
-          evaluate(point);
-        }
+        recordFix
       );
     })();
 
@@ -134,7 +144,7 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
       cancelled = true;
       subscription?.remove();
     };
-  }, [evaluate]);
+  }, []);
 
   // Platform geofence transitions, which arrive whether or not the UI is up.
   useEffect(() => {
@@ -174,7 +184,7 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
         void refreshLocation();
       }
     });
-  }, [evaluate, refreshLocation]);
+  }, []);
 
   // Keep the registered fence set in step with the user's zones.
   useEffect(() => {
@@ -226,7 +236,5 @@ export function useSypauEngine(): { refreshLocation: () => Promise<void> } {
       void refreshLocation();
     });
     return () => subscription.remove();
-  }, [refreshLocation]);
-
-  return { refreshLocation };
+  }, []);
 }

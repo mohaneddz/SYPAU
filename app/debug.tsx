@@ -16,7 +16,7 @@ import { isLocationUpdatesRunning } from '@/core/monitoring';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { listEvents } from '@/db/events';
 import { distanceToGeometry } from '@/engine/geo';
-import { useSypauEngine } from '@/hooks/useSypauEngine';
+import { refreshLocation } from '@/hooks/useSypauEngine';
 import { useEngineStore } from '@/state/useEngineStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { useZoneStore } from '@/state/useZoneStore';
@@ -25,8 +25,6 @@ import { formatDistance } from '@/utils/geometry';
 type SelfTestResult = { label: string; passed: boolean; detail: string };
 
 export default function DebugRoute() {
-  const { refreshLocation } = useSypauEngine();
-
   const fix = useEngineStore((s) => s.fix);
   const engine = useEngineStore((s) => s.engine);
   const monitoring = useEngineStore((s) => s.monitoring);
@@ -301,7 +299,7 @@ export default function DebugRoute() {
         </>
       ) : null}
 
-      <RedButton label="Force location update" onPress={() => void refreshLocation()} />
+      <RedButton label="Force location update" onPress={() => void refreshLocation({ forced: true })} />
 
       <View style={styles.actions}>
         <RedButton

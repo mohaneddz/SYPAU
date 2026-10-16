@@ -22,7 +22,6 @@ import { ZoneMap } from '@/components/sypau/zoneMap';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { geometryArea } from '@/engine/geo';
 import { countEventsSince } from '@/db/events';
-import { useSypauEngine } from '@/hooks/useSypauEngine';
 import { useActivityStore } from '@/state/useActivityStore';
 import { useEngineStore } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
@@ -31,8 +30,6 @@ import { useZoneStore } from '@/state/useZoneStore';
 import { formatArea } from '@/utils/geometry';
 
 export default function HomeRoute() {
-  useSypauEngine();
-
   const engine = useEngineStore((s) => s.engine);
   const fix = useEngineStore((s) => s.fix);
   const zones = useZoneStore((s) => s.zones);
