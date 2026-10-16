@@ -105,6 +105,7 @@ export default function RootLayout() {
             <Stack.Screen name="home" />
             <Stack.Screen name="zones/index" />
             <Stack.Screen name="zones/create" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="zones/map" />
             <Stack.Screen name="zones/[id]/index" />
             <Stack.Screen name="zones/[id]/edit" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="profiles/index" />

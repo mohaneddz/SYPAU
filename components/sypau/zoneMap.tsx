@@ -12,6 +12,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SYPAU_MAP_STYLE } from '@/constants/map-style';
 import { SypauColor } from '@/constants/sypau';
 import { circlePolygonPoints, type Geometry, type LatLng } from '@/engine/geo';
+import { centroidOf } from '@/utils/geometry';
 import { boundsOf, pointsToLngLatRing, toLngLat } from '@/utils/map-geo';
 
 /** A zone's outline as a closed ring, whatever shape it was drawn as. */
@@ -68,11 +69,13 @@ export type ZoneMapHandle = {
   zoomBy: (delta: number) => void;
   /** Frames every zone on the map, e.g. after the list changes. */
   fitAll: () => void;
+  /** Frames just these shapes, e.g. the zone picked from a list. */
+  fitTo: (geometries: Geometry[]) => void;
 };
 
 type ZoneMapProps = {
-  /** Zones to draw. The first frames the camera when no centre is given. */
-  geometries?: { id: string; geometry: Geometry; muted?: boolean }[];
+  /** Zones to draw. Together they frame the camera when no centre is given. */
+  geometries?: { id: string; geometry: Geometry; muted?: boolean; label?: string }[];
   center?: LatLng | null;
   zoom?: number;
   userLocation?: LatLng | null;
@@ -145,6 +148,11 @@ export function ZoneMap({
         if (!boundsRef.current) return;
         cameraRef.current?.fitBounds(boundsRef.current, { padding, duration: 600 });
       },
+      fitTo: (shapes) => {
+        const target = boundsOf(shapes);
+        if (!target) return;
+        cameraRef.current?.fitBounds(target, { padding, duration: 600 });
+      },
     };
   }, [controlRef, padding]);
 
@@ -191,11 +199,62 @@ export function ZoneMap({
           />
         ))}
 
+        <ZoneLabels geometries={geometries} />
+
         {userLocation ? <UserMarker point={userLocation} /> : null}
 
         {children}
       </Map>
     </View>
+  );
+}
+
+/**
+ * Zone names drawn by the map itself rather than as React markers, so they
+ * stay pinned through pans and zooms and give way to each other on collision.
+ */
+function ZoneLabels({ geometries }: { geometries: ZoneMapProps['geometries'] }) {
+  const data = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: 'FeatureCollection',
+      features: (geometries ?? [])
+        .filter((entry) => entry.label)
+        .map((entry) => {
+          const center =
+            entry.geometry.type === 'circle'
+              ? entry.geometry.center
+              : (centroidOf(entry.geometry.points) ?? entry.geometry.points[0]);
+          return {
+            type: 'Feature',
+            properties: { name: entry.label!.toUpperCase(), muted: entry.muted ? 1 : 0 },
+            geometry: { type: 'Point', coordinates: toLngLat(center) },
+          };
+        }),
+    }),
+    [geometries]
+  );
+
+  if (data.features.length === 0) return null;
+
+  return (
+    <GeoJSONSource id="zoneLabels" data={data}>
+      <Layer
+        id="zoneLabelText"
+        type="symbol"
+        layout={{
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 13,
+          'text-letter-spacing': 0.12,
+          'text-offset': [0, 1.6],
+        }}
+        paint={{
+          'text-color': ['case', ['==', ['get', 'muted'], 1], SypauColor.boneFaint, SypauColor.bone],
+          'text-halo-color': SypauColor.ink,
+          'text-halo-width': 1.6,
+        }}
+      />
+    </GeoJSONSource>
   );
 }
 
