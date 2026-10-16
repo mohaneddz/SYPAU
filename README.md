@@ -41,9 +41,23 @@ Polygons register as their bounding circle, since the platform only understands 
 
 Transitions that arrive while no JS runtime is attached are queued natively and replayed on the next subscribe, so a crossing during a cold stretch isn't lost.
 
+The engine's ownership state — which zone holds the phone, what it changed, and the snapshot of how the phone was before — is persisted, so relaunching inside a zone carries on rather than entering it again, and leaving after a restart still restores what SYPAU found.
+
 ## Screens
 
-Splash · Onboarding · Permission setup · Home · Zones · Zone detail · Create/edit zone · Profiles · Profile detail · Create/edit profile · Activity log · Settings · GPS debug
+Splash · Onboarding · Permission setup · Home · Zones · Coverage map · Zone detail · Create/edit zone · Profiles · Profile detail · Create/edit profile · Activity log · Settings · GPS debug
+
+| Home | Coverage | Zones | Zone detail |
+| --- | --- | --- | --- |
+| ![Home](screenshots/01_home.webp) | ![Coverage map](screenshots/02_map.webp) | ![Zones](screenshots/03_zones.webp) | ![Zone detail](screenshots/04_zone_details.webp) |
+
+| Create zone | Activity | Settings | GPS debug |
+| --- | --- | --- | --- |
+| ![Create zone](screenshots/05_create_zone.webp) | ![Activity](screenshots/06_activity.webp) | ![Settings](screenshots/07_settings.webp) | ![GPS debug](screenshots/08_debug.webp) |
+
+Captured from the app running on an Android emulator.
+
+The **coverage map** puts every zone on one screen with the ground covered and a count of zones that overlap — overlap is allowed (that's what priority is for), but the lower zone loses there, so it's surfaced. **Permission setup** walks through grants in the order worth giving them and says what to switch on before it ever sends you to an Android settings screen.
 
 The visual identity — near-black textures, torn paper, the red X and the origami hands — comes from the reference designs in [`design/`](design/), which are the source of truth for the UI.
 
