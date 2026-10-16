@@ -1,31 +1,42 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { DarkCard } from '@/components/sypau/cards';
-import { RedButton, StatusChip } from '@/components/sypau/controls';
 import { SypauConfirmDialog } from '@/components/sypau/feedback';
-import { HandUnderline } from '@/components/sypau/header';
-import { SypauIcon } from '@/components/sypau/icon';
-import { ProfileEffectRows } from '@/components/sypau/profileEffects';
+import { HandUnderline, RedCross } from '@/components/sypau/header';
+import { SypauIcon, type SypauIconName } from '@/components/sypau/icon';
+import { blockedEffectCount, NumberedEffectRows } from '@/components/sypau/profileEffects';
 import { SypauScaffold } from '@/components/sypau/scaffold';
-import { Display, SectionTitle, SypauText } from '@/components/sypau/text';
+import { Display, SypauText } from '@/components/sypau/text';
+import { Grain } from '@/components/sypau/texture';
 import { ZoneMap } from '@/components/sypau/zoneMap';
 import { SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { listEventsForZone } from '@/db/events';
-import { distanceToGeometry, geometryArea } from '@/engine/geo';
+import { distanceToEdge, geometryArea } from '@/engine/geo';
 import { useEngineStore } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
+import { useSettingsStore } from '@/state/useSettingsStore';
 import { useZoneStore } from '@/state/useZoneStore';
-import { formatArea, formatDistance } from '@/utils/geometry';
+import { boundingCircle, formatArea, formatDistance } from '@/utils/geometry';
+import type { Zone } from '@/types/zone';
 
 export default function ZoneDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const zone = useZoneStore((s) => s.byId(id));
+  const zones = useZoneStore((s) => s.zones);
   const setEnabled = useZoneStore((s) => s.setEnabled);
   const remove = useZoneStore((s) => s.remove);
   const profileById = useProfileStore((s) => s.byId);
+  const automationEnabled = useSettingsStore((s) => s.settings.automationEnabled);
 
   const engine = useEngineStore((s) => s.engine);
   const fix = useEngineStore((s) => s.fix);
@@ -33,7 +44,13 @@ export default function ZoneDetailRoute() {
 
   const [pendingDelete, setPendingDelete] = useState(false);
 
-  const events = useMemo(() => (zone ? listEventsForZone(zone.id, 6) : []), [zone?.id, engine]);
+  // Keyed on the active zone and the matched set rather than the whole engine
+  // object, which changes on every fix and would re-query the log each time.
+  const events = useMemo(
+    () => (zone ? listEventsForZone(zone.id, 5) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [zone?.id, engine.activeZoneId, engine.matchedZoneIds.join()]
+  );
 
   if (!zone) {
     return (
@@ -49,31 +66,59 @@ export default function ZoneDetailRoute() {
   const exitProfile = profileById(zone.exitProfileId);
   const isInside = engine.matchedZoneIds.includes(zone.id);
   const isActive = engine.activeZoneId === zone.id;
-  const distance = fix ? distanceToGeometry(fix.point, zone.geometry) : null;
+  // Inside but outranked: another, higher-priority zone holds the phone.
+  const outranked = isInside && !isActive && engine.activeZoneId !== null;
+  const outrankedBy = outranked
+    ? zones.find((entry) => entry.id === engine.activeZoneId)
+    : null;
+  const edge = fix ? distanceToEdge(fix.point, zone.geometry) : null;
+  const blocked = profile ? blockedEffectCount(profile.config, capabilities) : 0;
 
-  const state = !zone.enabled ? 'Disabled' : isActive ? 'Active' : isInside ? 'Inside' : 'Inactive';
-  const stateTone = !zone.enabled ? 'red' : isActive || isInside ? 'green' : 'neutral';
+  const state = !zone.enabled
+    ? { label: 'Paused', color: SypauColor.red }
+    : isActive
+      ? { label: 'Active', color: SypauColor.green }
+      : isInside
+        ? { label: 'Standing by', color: SypauColor.amber }
+        : { label: 'Armed', color: SypauColor.cyan };
+
+  const description = !zone.enabled
+    ? 'This zone is paused. Nothing happens when you cross it until you resume it.'
+    : !automationEnabled
+      ? 'SYPAU is switched off in Settings, so this zone is only being watched.'
+      : outrankedBy
+        ? `${outrankedBy.name} has higher priority here, so it holds your phone while you're in both.`
+        : 'This zone is monitoring its boundary and will apply your profile when you cross it.';
 
   return (
     <SypauScaffold title="Zone Detail" showBack>
       <View style={styles.hero}>
         <View style={styles.heroText}>
-          <Display>{zone.name}</Display>
-          <StatusChip label={state} tone={stateTone} />
+          <View style={styles.nameCross}>
+            <RedCross size={20} />
+          </View>
+          <Display numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+            {zone.name}
+          </Display>
 
-          <SypauText variant="hand" color={SypauColor.bone}>
+          <View style={styles.stateRow}>
+            <GlowDot color={state.color} live={zone.enabled && (isActive || isInside)} />
+            <SypauText variant="cardTitle" caps color={state.color}>
+              {state.label}
+            </SypauText>
+          </View>
+
+          <SypauText variant="handSm" caps color={SypauColor.bone}>
             You are{' '}
-            <SypauText variant="hand" color={SypauColor.red}>
-              {isInside ? 'inside' : 'outside'}
+            <SypauText variant="handSm" caps color={SypauColor.red}>
+              {fix ? (isInside ? 'inside' : 'outside') : 'somewhere'}
             </SypauText>{' '}
             this zone
           </SypauText>
-          <HandUnderline width={150} />
+          <HandUnderline width={120} />
 
           <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-            {zone.enabled
-              ? 'SYPAU is watching this boundary and will apply your profile when you cross it.'
-              : 'This zone is paused. Nothing will happen when you cross it.'}
+            {description}
           </SypauText>
         </View>
 
@@ -82,99 +127,152 @@ export default function ZoneDetailRoute() {
             geometries={[{ id: zone.id, geometry: zone.geometry, muted: !zone.enabled }]}
             userLocation={fix?.point ?? null}
             interactive={false}
-            zoom={13}
+            fitPadding={16}
             style={styles.mapPreview}
           />
           <View style={styles.mapCaption}>
-            <SypauIcon name="target" size={13} color={SypauColor.boneMuted} />
-            <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-              {zone.geometry.type === 'circle'
-                ? `${Math.round(zone.geometry.radiusMeters)} m radius`
-                : formatArea(geometryArea(zone.geometry))}
+            <SypauIcon name="locate" size={14} color={SypauColor.boneMuted} />
+            <SypauText variant="label" caps color={SypauColor.boneMuted}>
+              {radiusCaption(zone)}
             </SypauText>
           </View>
         </View>
       </View>
 
-      <View style={styles.factRow}>
-        <Fact label="Boundary" value={zone.boundaryType} />
-        <Fact
-          label="Distance"
-          value={distance === null ? '—' : isInside ? 'Inside' : formatDistance(distance)}
-        />
-        <Fact label="Priority" value={String(zone.priority)} />
-      </View>
-
-      <View style={styles.factRow}>
-        <Fact label="Last entered" value={formatMoment(zone.lastEnteredAt)} />
-        <Fact label="Last exited" value={formatMoment(zone.lastExitedAt)} />
-      </View>
-
-      <SectionTitle>Profile</SectionTitle>
-      {profile ? (
-        <DarkCard
-          onPress={() => router.push({ pathname: '/profiles/[id]', params: { id: profile.id } })}>
-          <View style={styles.profileHeader}>
-            <SypauIcon name={profile.icon} size={20} color={SypauColor.cyan} />
-            <SypauText variant="cardTitle" caps style={styles.flex}>
-              {profile.name}
-            </SypauText>
-            <SypauIcon name="chevron" size={18} color={SypauColor.boneFaint} />
+      <View style={styles.pair}>
+        <DarkCard style={styles.flex}>
+          <SypauText variant="label" caps color={SypauColor.boneMuted}>
+            Categories
+          </SypauText>
+          <View style={styles.categories}>
+            <Category icon="polygon" label={zone.boundaryType} />
+            <Category
+              icon="dnd"
+              label={profile?.name ?? 'No profile'}
+              color={profile ? SypauColor.amber : SypauColor.boneFaint}
+            />
+            <Category icon="shield" label={`P${zone.priority}`} />
           </View>
-
-          <ProfileEffectRows config={profile.config} capabilities={capabilities} />
         </DarkCard>
-      ) : (
-        <DarkCard>
+
+        <DarkCard style={styles.flex}>
+          <SypauText variant="label" caps color={SypauColor.boneMuted}>
+            History
+          </SypauText>
+          <View style={styles.history}>
+            <SypauIcon name="clock" size={26} color={SypauColor.red} />
+            <View style={styles.flex}>
+              <SypauText variant="label" caps numberOfLines={1}>
+                In · {formatMoment(zone.lastEnteredAt)}
+              </SypauText>
+              <SypauText variant="label" caps color={SypauColor.boneMuted} numberOfLines={1}>
+                Out · {formatMoment(zone.lastExitedAt)}
+              </SypauText>
+            </View>
+          </View>
+        </DarkCard>
+      </View>
+
+      <DarkCard>
+        <View style={styles.cardHead}>
+          <SypauText variant="label" caps color={SypauColor.boneMuted} style={styles.flex}>
+            Auto-trigger
+          </SypauText>
+          {edge !== null ? (
+            <View style={styles.inline}>
+              <SypauIcon name="target" size={14} color={SypauColor.boneMuted} />
+              <SypauText variant="labelSm" caps color={SypauColor.boneMuted}>
+                {formatDistance(edge)} to edge
+              </SypauText>
+            </View>
+          ) : null}
+        </View>
+
+        <TriggerRow
+          title="Entry detection"
+          body={
+            profile
+              ? `Apply ${profile.name} ${delayPhrase(zone.activationDelaySeconds, 'inside')}.`
+              : 'No profile is set, so entering does nothing.'
+          }
+          armed={zone.enabled && profile !== null}
+        />
+        <TriggerRow
+          title="Exit detection"
+          body={`${exitRuleText(zone.exitBehavior, exitProfile?.name ?? null)} ${delayPhrase(zone.exitDelaySeconds, 'outside')}.`}
+          armed={zone.enabled}
+          divided
+        />
+      </DarkCard>
+
+      <DarkCard>
+        <View style={styles.cardHead}>
+          <SypauText variant="label" caps color={SypauColor.boneMuted} style={styles.flex}>
+            Actions (in order)
+          </SypauText>
+          {profile ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open the ${profile.name} profile`}
+              hitSlop={8}
+              onPress={() => router.push({ pathname: '/profiles/[id]', params: { id: profile.id } })}
+              style={styles.inline}>
+              <SypauText variant="labelSm" caps color={SypauColor.cyan}>
+                {profile.name}
+              </SypauText>
+              <SypauIcon name="chevron" size={14} color={SypauColor.cyan} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {blocked > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/settings/permissions')}
+            style={({ pressed }) => [styles.blockedBanner, pressed && styles.pressed]}>
+            <SypauIcon name="lock" size={16} color={SypauColor.amber} />
+            <SypauText variant="bodySm" color={SypauColor.bone} style={styles.flex}>
+              {blocked === 1 ? 'One action is' : `${blocked} actions are`} waiting on a permission.
+              SYPAU won&rsquo;t pretend it applied {blocked === 1 ? 'it' : 'them'}.
+            </SypauText>
+            <SypauText variant="labelSm" caps color={SypauColor.amber}>
+              Fix
+            </SypauText>
+          </Pressable>
+        ) : null}
+
+        {profile ? (
+          <NumberedEffectRows config={profile.config} capabilities={capabilities} />
+        ) : (
           <SypauText variant="body" color={SypauColor.amber}>
             The profile this zone used was deleted. Edit the zone to pick another.
           </SypauText>
-        </DarkCard>
-      )}
-
-      <SectionTitle>Zone rule</SectionTitle>
-      <DarkCard>
-        <RuleRow
-          icon="pin"
-          title="When I enter"
-          value={profile ? `Activate ${profile.name}` : 'No profile set'}
-        />
-        <RuleRow
-          icon="back"
-          title="When I exit"
-          value={exitRuleText(zone.exitBehavior, exitProfile?.name ?? null)}
-        />
-        {zone.activationDelaySeconds > 0 ? (
-          <RuleRow
-            icon="clock"
-            title="Activation delay"
-            value={`After ${zone.activationDelaySeconds}s inside`}
-          />
-        ) : null}
-        {zone.exitDelaySeconds > 0 ? (
-          <RuleRow
-            icon="clock"
-            title="Release delay"
-            value={`After ${zone.exitDelaySeconds}s outside`}
-          />
-        ) : null}
+        )}
       </DarkCard>
 
-      <SectionTitle>Recent activity</SectionTitle>
       <DarkCard>
+        <SypauText variant="label" caps color={SypauColor.boneMuted}>
+          Recent activity
+        </SypauText>
         {events.length === 0 ? (
-          <SypauText variant="bodySm" color={SypauColor.boneFaint}>
+          <SypauText variant="bodySm" color={SypauColor.boneFaint} style={styles.eventsEmpty}>
             Nothing logged for this zone yet.
           </SypauText>
         ) : (
           events.map((event) => (
             <View key={event.id} style={styles.eventRow}>
               <SypauIcon
-                name={event.severity === 'error' ? 'alert' : 'check'}
+                name={event.severity === 'error' ? 'alert' : event.severity === 'warning' ? 'lock' : 'check'}
                 size={14}
-                color={event.severity === 'error' ? SypauColor.red : SypauColor.cyan}
+                color={
+                  event.severity === 'error'
+                    ? SypauColor.red
+                    : event.severity === 'warning'
+                      ? SypauColor.amber
+                      : SypauColor.cyan
+                }
               />
-              <SypauText variant="bodySm" style={styles.flex}>
+              <SypauText variant="bodySm" style={styles.flex} numberOfLines={1}>
                 {event.title}
               </SypauText>
               <SypauText variant="bodySm" color={SypauColor.boneFaint}>
@@ -186,27 +284,25 @@ export default function ZoneDetailRoute() {
       </DarkCard>
 
       <View style={styles.actions}>
-        <RedButton
+        <ActionButton
+          icon="edit"
           label="Edit"
-          variant="outline"
           onPress={() => router.push({ pathname: '/zones/[id]/edit', params: { id: zone.id } })}
-          style={styles.flex}
         />
-        <RedButton
+        <ActionButton
+          icon={zone.enabled ? 'pause' : 'zap'}
           label={zone.enabled ? 'Pause' : 'Resume'}
-          variant="outline"
           onPress={() => setEnabled(zone.id, !zone.enabled)}
-          style={styles.flex}
         />
+        <ActionButton icon="close" label="Delete" destructive onPress={() => setPendingDelete(true)} />
       </View>
-
-      <RedButton label="Delete zone" onPress={() => setPendingDelete(true)} />
 
       <SypauConfirmDialog
         visible={pendingDelete}
         destructive
+        icon="trash"
         title={`Delete ${zone.name}?`}
-        message="The boundary and its history go with it. The profile it used stays."
+        message="The boundary and its history go with it. The profile it used stays. If you're inside it, SYPAU hands back what it changed straight away."
         confirmLabel="Delete zone"
         onCancel={() => setPendingDelete(false)}
         onConfirm={() => {
@@ -219,52 +315,139 @@ export default function ZoneDetailRoute() {
   );
 }
 
-function exitRuleText(behavior: string, profileName: string | null): string {
-  switch (behavior) {
-    case 'defaultProfile':
-      return 'Activate your default profile';
-    case 'specificProfile':
-      return profileName ? `Activate ${profileName}` : 'Activate a chosen profile';
-    case 'nothing':
-      return 'Leave the device as it is';
-    default:
-      return 'Restore what SYPAU changed';
-  }
-}
+/** The status light. Pulses while the zone has the phone, steady otherwise. */
+function GlowDot({ color, live }: { color: string; live: boolean }) {
+  const reducedMotion = useSettingsStore((s) => s.settings.reducedMotion);
+  const pulse = useSharedValue(0);
 
-function Fact({ label, value }: { label: string; value: string }) {
+  useEffect(() => {
+    if (!live || reducedMotion) {
+      pulse.value = 0;
+      return;
+    }
+    pulse.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.out(Easing.quad) }), -1);
+  }, [live, pulse, reducedMotion]);
+
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: 0.55 * (1 - pulse.value),
+    transform: [{ scale: 1 + pulse.value * 1.4 }],
+  }));
+
   return (
-    <DarkCard style={styles.fact}>
-      <SypauText variant="section" caps color={SypauColor.boneFaint}>
-        {label}
-      </SypauText>
-      <SypauText variant="label" caps>
-        {value}
-      </SypauText>
-    </DarkCard>
+    <View style={styles.glow}>
+      <Animated.View style={[styles.glowHalo, { backgroundColor: color }, haloStyle]} />
+      <View style={[styles.glowCore, { backgroundColor: color, shadowColor: color }]} />
+    </View>
   );
 }
 
-function RuleRow({
+function Category({
   icon,
-  title,
-  value,
+  label,
+  color = SypauColor.cyan,
 }: {
-  icon: import('@/components/sypau/icon').SypauIconName;
-  title: string;
-  value: string;
+  icon: SypauIconName;
+  label: string;
+  color?: string;
 }) {
   return (
-    <View style={styles.ruleRow}>
-      <SypauIcon name={icon} size={16} color={SypauColor.red} />
+    <View style={styles.category}>
+      <SypauIcon name={icon} size={24} color={color} />
+      <SypauText
+        variant="labelSm"
+        caps
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        align="center">
+        {label}
+      </SypauText>
+    </View>
+  );
+}
+
+function TriggerRow({
+  title,
+  body,
+  armed,
+  divided = false,
+}: {
+  title: string;
+  body: string;
+  armed: boolean;
+  divided?: boolean;
+}) {
+  return (
+    <View style={[styles.trigger, divided && styles.triggerDivided]}>
+      <SypauIcon name="target" size={30} color={SypauColor.red} />
       <View style={styles.flex}>
-        <SypauText variant="labelSm" caps color={SypauColor.boneMuted}>
+        <SypauText variant="label" caps>
           {title}
         </SypauText>
-        <SypauText variant="body">{value}</SypauText>
+        <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+          {body}
+        </SypauText>
+      </View>
+      <View style={[styles.armedBox, !armed && styles.armedBoxOff]}>
+        <SypauText variant="labelSm" caps color={armed ? SypauColor.red : SypauColor.boneFaint}>
+          {armed ? 'Armed' : 'Off'}
+        </SypauText>
       </View>
     </View>
   );
+}
+
+function ActionButton({
+  icon,
+  label,
+  onPress,
+  destructive = false,
+}: {
+  icon: SypauIconName;
+  label: string;
+  onPress: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label} zone`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        destructive && styles.actionDestructive,
+        pressed && styles.pressed,
+      ]}>
+      {destructive ? <Grain opacity={0.18} /> : null}
+      <SypauIcon name={icon} size={18} color={SypauColor.bone} />
+      <SypauText variant="label" caps>
+        {label}
+      </SypauText>
+    </Pressable>
+  );
+}
+
+function radiusCaption(zone: Zone): string {
+  if (zone.geometry.type === 'circle') return `${Math.round(zone.geometry.radiusMeters)}m radius`;
+  const circle = boundingCircle(zone.geometry.points);
+  return circle ? `~${Math.round(circle.radiusMeters)}m · ${formatArea(geometryArea(zone.geometry))}` : '—';
+}
+
+function delayPhrase(seconds: number, where: 'inside' | 'outside'): string {
+  return seconds > 0 ? `after ${seconds}s ${where}` : 'straight away';
+}
+
+function exitRuleText(behavior: string, profileName: string | null): string {
+  switch (behavior) {
+    case 'defaultProfile':
+      return 'Switch to your default profile';
+    case 'specificProfile':
+      return profileName ? `Switch to ${profileName}` : 'Switch to a chosen profile';
+    case 'nothing':
+      return 'Leave the phone as it is';
+    default:
+      return 'Hand back what SYPAU changed';
+  }
 }
 
 function formatMoment(timestamp: number | null): string {
@@ -282,29 +465,73 @@ function formatMoment(timestamp: number | null): string {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.xs },
+  pressed: { opacity: 0.75 },
+
   hero: { flexDirection: 'row', gap: SypauSpace.md },
   heroText: { flex: 1, gap: SypauSpace.xs },
-  heroMap: { width: 150, gap: SypauSpace.xs },
-  mapPreview: { height: 150, borderRadius: SypauRadius.chip },
-  mapCaption: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.xs },
+  nameCross: { marginLeft: SypauSpace.xxl * 2, marginBottom: -SypauSpace.md, zIndex: 1 },
+  stateRow: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.sm },
+  heroMap: { width: 160, gap: 0 },
+  mapPreview: {
+    height: 170,
+    borderTopLeftRadius: SypauRadius.chip,
+    borderTopRightRadius: SypauRadius.chip,
+  },
+  mapCaption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SypauSpace.xs,
+    paddingHorizontal: SypauSpace.sm,
+    paddingVertical: SypauSpace.sm,
+    backgroundColor: SypauColor.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SypauColor.hairline,
+    borderBottomLeftRadius: SypauRadius.chip,
+    borderBottomRightRadius: SypauRadius.chip,
+  },
 
-  factRow: { flexDirection: 'row', gap: SypauSpace.sm },
-  fact: { flex: 1, gap: SypauSpace.xs },
+  glow: { width: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
+  glowHalo: { position: 'absolute', width: 16, height: 16, borderRadius: 8 },
+  glowCore: {
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 4,
+  },
 
-  profileHeader: {
+  pair: { flexDirection: 'row', gap: SypauSpace.md },
+  categories: { flexDirection: 'row', marginTop: SypauSpace.md, gap: SypauSpace.xs },
+  category: { flex: 1, alignItems: 'center', gap: SypauSpace.xs },
+  history: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.md, marginTop: SypauSpace.md },
+
+  cardHead: { flexDirection: 'row', alignItems: 'center', marginBottom: SypauSpace.sm },
+  trigger: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.md, paddingVertical: SypauSpace.sm },
+  triggerDivided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: SypauColor.hairline },
+  armedBox: {
+    borderWidth: 1,
+    borderColor: SypauColor.red,
+    borderRadius: 2,
+    paddingHorizontal: SypauSpace.sm,
+    paddingVertical: 3,
+  },
+  armedBoxOff: { borderColor: SypauColor.hairline },
+
+  blockedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SypauSpace.sm,
-    marginBottom: SypauSpace.md,
+    padding: SypauSpace.md,
+    marginBottom: SypauSpace.sm,
+    borderRadius: SypauRadius.chip,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SypauColor.amber,
+    backgroundColor: 'rgba(245,166,35,0.08)',
   },
 
-  ruleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SypauSpace.md,
-    paddingVertical: SypauSpace.sm,
-  },
-
+  eventsEmpty: { marginTop: SypauSpace.sm },
   eventRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -312,5 +539,19 @@ const styles = StyleSheet.create({
     paddingVertical: SypauSpace.sm,
   },
 
-  actions: { flexDirection: 'row', gap: SypauSpace.md },
+  actions: { flexDirection: 'row', gap: SypauSpace.sm },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SypauSpace.sm,
+    paddingVertical: SypauSpace.lg,
+    borderRadius: SypauRadius.button,
+    borderWidth: 1,
+    borderColor: SypauColor.hairline,
+    backgroundColor: SypauColor.surface,
+    overflow: 'hidden',
+  },
+  actionDestructive: { backgroundColor: SypauColor.red, borderColor: SypauColor.red },
 });
