@@ -3,8 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-import { DarkCard } from '@/components/sypau/cards';
-import { RedButton, StatusChip } from '@/components/sypau/controls';
+import { RedButton } from '@/components/sypau/controls';
 import { HandUnderline } from '@/components/sypau/header';
 import { SypauIcon, type SypauIconName } from '@/components/sypau/icon';
 import { SypauText } from '@/components/sypau/text';
@@ -49,70 +48,6 @@ export function SypauEmptyState({
         <RedButton label={actionLabel} onPress={onAction} style={styles.emptyAction} />
       ) : null}
     </View>
-  );
-}
-
-type PermissionRowProps = {
-  icon: SypauIconName;
-  title: string;
-  description: string;
-  granted: boolean;
-  /** Shown instead of "needs access" when the platform simply can't do it. */
-  unavailable?: boolean;
-  actionLabel?: string;
-  onAction?: () => void;
-};
-
-/**
- * One requirement on the permissions screen: what it is, why SYPAU wants it,
- * where it currently stands, and the one button that moves it forward.
- */
-export function SypauPermissionRow({
-  icon,
-  title,
-  description,
-  granted,
-  unavailable = false,
-  actionLabel = 'Grant',
-  onAction,
-}: PermissionRowProps) {
-  const tone = granted ? 'cyan' : unavailable ? 'neutral' : 'amber';
-  const label = granted ? 'Ready' : unavailable ? 'Unavailable' : 'Needs access';
-
-  return (
-    <DarkCard highlighted={granted}>
-      <View style={styles.permissionRow}>
-        <View style={styles.permissionIcon}>
-          <SypauIcon
-            name={granted ? 'check' : icon}
-            size={20}
-            color={granted ? SypauColor.cyan : SypauColor.boneMuted}
-          />
-        </View>
-
-        <View style={styles.permissionText}>
-          <SypauText variant="label" caps color={SypauColor.bone}>
-            {title}
-          </SypauText>
-          <SypauText variant="bodySm" color={SypauColor.boneMuted}>
-            {description}
-          </SypauText>
-          <StatusChip label={label} tone={tone} style={styles.permissionChip} />
-        </View>
-      </View>
-
-      {!granted && !unavailable && onAction ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onAction}
-          style={({ pressed }) => [styles.permissionAction, pressed && styles.pressed]}>
-          <SypauText variant="label" caps color={SypauColor.red}>
-            {actionLabel}
-          </SypauText>
-          <SypauIcon name="chevron" size={16} color={SypauColor.red} />
-        </Pressable>
-      ) : null}
-    </DarkCard>
   );
 }
 
@@ -238,29 +173,6 @@ const styles = StyleSheet.create({
   emptyArt: { width: 150, height: 120, opacity: 0.9 },
   emptyBody: { maxWidth: 280 },
   emptyAction: { alignSelf: 'stretch', marginTop: SypauSpace.lg },
-
-  permissionRow: { flexDirection: 'row', gap: SypauSpace.lg },
-  permissionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: SypauRadius.pill,
-    borderWidth: 1,
-    borderColor: SypauColor.hairline,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  permissionText: { flex: 1, gap: SypauSpace.xs },
-  permissionChip: { marginTop: SypauSpace.xs },
-  permissionAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: SypauSpace.xs,
-    marginTop: SypauSpace.md,
-    paddingTop: SypauSpace.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: SypauColor.hairline,
-  },
 
   dialogBackdrop: {
     flex: 1,
