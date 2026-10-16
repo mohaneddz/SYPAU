@@ -350,8 +350,9 @@ export default function DebugRoute() {
         visible={notice !== null}
         title="Diagnostics"
         message={notice ?? ''}
+        icon="info"
         confirmLabel="Got it"
-        cancelLabel="Close"
+        cancelLabel={null}
         onCancel={() => setNotice(null)}
         onConfirm={() => setNotice(null)}
       />

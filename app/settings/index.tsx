@@ -316,8 +316,9 @@ export default function SettingsRoute() {
         visible={notice !== null}
         title="Export"
         message={notice ?? ''}
+        icon="info"
         confirmLabel="Got it"
-        cancelLabel="Close"
+        cancelLabel={null}
         onCancel={() => setNotice(null)}
         onConfirm={() => setNotice(null)}
       />

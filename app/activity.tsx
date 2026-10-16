@@ -147,7 +147,7 @@ export default function ActivityRoute() {
         title={selected?.title ?? ''}
         message={selected?.description ?? 'No further detail was recorded.'}
         confirmLabel="Close"
-        cancelLabel="Dismiss"
+        cancelLabel={null}
         onCancel={() => setSelected(null)}
         onConfirm={() => setSelected(null)}>
         {selected ? (
