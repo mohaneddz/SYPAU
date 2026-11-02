@@ -1,44 +1,44 @@
 # Device test issues
 
 First pass on a physical phone: Realme RMX3921, ColorOS, Android 16 (API 36), 1080×2412.
-Dev client build, 2026-11-02. Checked boxes are fixed.
+Dev client build, 2026-11-02. Checked boxes are fixed; "verified" means seen on that phone after the fix.
 
 ## Layout and text
 
-- [ ] **Home status strip crops the last item.** "NOTIFICATION" runs off the right edge of the torn-paper strip (Alarms · Calls · Notification). The three columns don't fit at this width; the label needs to shrink or the strip needs to reflow.
-- [ ] **Boundary type labels break mid-word.** On Create zone, "POLYGON" renders as "POLYGO / N" and "FREEHAND" as "FREEHA / ND". The three segments are too narrow for the label at that size.
-- [ ] **Zone name breaks mid-word on Zone detail.** "TESTZONE" renders as "TESTZON / E". The display title needs to shrink to fit (or wrap only at word boundaries) — any single-word name longer than ~7 characters breaks.
-- [ ] **Confirm dialog button wraps.** "OPEN SETTINGS" wraps onto two lines inside its button; the two-button row leaves the primary button too narrow for its label.
-- [ ] **Mute behaviour cards and the icon row clip at the sheet padding**, not the screen edge, on Create zone. Reads as cropped rather than as a horizontal scroller.
-- [ ] **"Not active" on Home's Silence time card wraps to two lines** in a column that has room for one.
+- [x] **Home status strip crops the last item.** "NOTIFICATIONS" ran off the right edge of the torn-paper strip. Labels now shrink to fit their column. Verified.
+- [x] **Boundary type labels break mid-word.** "POLYGO / N", "FREEHA / ND" on Create zone. Segmented labels are single-line and shrink to fit. Verified.
+- [x] **Zone name breaks mid-word on Zone detail.** "TESTZON / E". A single-word name now gets one line and shrinks; multi-word names may still use two. Verified.
+- [x] **Confirm dialog button wraps.** "OPEN SETTINGS" took two lines. Red button labels are single-line, and the dialog gives the primary button more room. Verified.
+- [x] **Create zone scrollers clip at the sheet padding.** The icon row and mute behaviour cards now run to the sheet's edge. Verified.
+- [x] **"Not active" on Home's Silence time card wraps.** Now reads "Off" at full size.
 
 ## Wrong or misleading information
 
-- [ ] **"Watching" doesn't mean monitoring is running.** Home's chip reads `automationEnabled`, not whether geofences are actually registered. On first launch registration failed (no background location) and Home still said "Watching".
-- [ ] **A stale error outlives its cause.** "Couldn't watch your zones — Background location permission is needed" stays in the activity log and on Home's activity card, and keeps the bell's red dot lit, after the permission was granted and a fence registered successfully. Nothing logs that monitoring recovered.
-- [ ] **Polygon zones show a "Radius".** The Zones list shows "Radius 266 m" for a triangle. A polygon has no radius; the value is presumably its bounding circle. Zone detail shows the same number unlabelled ("~266M · 0.08 KM²").
-- [ ] **Debug screen says LIVE on a stale fix.** The GPS debug card shows the LIVE badge while "Last update" is 7 minutes old.
-- [ ] **"P10" on Zone detail is unexplained.** The categories card shows "P10" with no hint that it means priority 10.
-- [ ] **Same screen, two titles.** The bell opens "ACTIVITY"; the Activity tab and Home's "View all" open "ACTIVITY LOG".
+- [x] **"Watching" doesn't mean monitoring is running.** Home and the Zones list now read registered fences / the location service: "Watching" only when something is listening, "Not watching" (amber) when not, "No zones yet" with nothing to watch. Verified ("Watching" with 1 fence).
+- [x] **A stale error outlives its cause.** A successful registration after a failure now logs "Watching your zones again", fences re-register when you come back from Settings, and the bell's dot only lights while the newest entry is an error or warning. Verified (recovery entry logged, dot cleared).
+- [x] **Polygon zones show a "Radius".** The list now says "Across" with the shape's width; Zone detail says "532m wide · 0.08 km²". Verified.
+- [x] **Debug screen says LIVE on a stale fix.** The badge turns amber "Stale · Nm ago" once the fix is over a minute old. Not seen on device.
+- [x] **"P10" on Zone detail is unexplained.** Now "Priority 10". Verified.
+- [x] **Same screen, two titles.** The header couldn't fit "Activity Log" and Android dropped "Log". The screen is now titled "Activity", matching its tab. Verified.
 
 ## Navigation
 
-- [ ] **Tab screens show a back arrow and stack on each other.** Every tab root (Zones, Activity, Profile) has a back arrow, and switching tabs pushes onto history — back from Profile returned to a Zone detail opened two tabs earlier.
-- [ ] **"Profile" tab opens "Profiles".** The tab is labelled Profile with a person icon (reads as an account screen), but it's the list of alarm profiles. Settings → "Alarm profiles" leads to the same list.
+- [x] **Tab screens show a back arrow and stack on each other.** Tabs now reset to Home and push the one tab, so back from any tab returns to Home; tab screens no longer show a back arrow. Verified (back from Activity → Home).
+- [x] **"Profile" tab opens "Profiles".** Renamed "Profiles" with the layers icon. The duplicate "Alarm profiles" row in Settings is gone. Verified.
 
 ## Loading and feedback
 
-- [ ] **The map is blank for several seconds.** Create zone shows a flat black map area for ~5 s before tiles appear, with no loading state.
+- [x] **The map is blank for several seconds.** Interactive maps show "Loading map" until the first full render (10 s fallback). Not seen on device — tiles were already cached on the re-test.
 
 ## Platform (ColorOS)
 
-- [x] **Battery step never completes.** ColorOS's "Allow background usage" switch doesn't add the app to Android's Doze whitelist, which is what the check reads. Fixed in `SettingsLauncher.kt` by sending the direct `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` prompt first — **needs a native rebuild to verify.**
-- [ ] **ColorOS freezes the app in the background.** `dumpsys location` logs `Freeze: true, Reason: FreezeControl` for SYPAU each time it's backgrounded. Geofence wake-ups may not arrive while frozen; untested until a real zone crossing.
-- [ ] **Stale v2 database crashes startup.** A database stamped `user_version = 2` from an earlier build had no `isDefault` column; `migrate()` skips it and every profile query fails ("SYPAU couldn't start"). Worked around on this phone by deleting the database; the migration itself is unchanged.
+- [x] **Battery step never completes.** ColorOS's "Allow background usage" switch doesn't add the app to Android's Doze whitelist, which is what the check reads. The button now sends Android's direct "Let app always run in background?" prompt. Verified the prompt appears; granting it from that prompt not yet confirmed.
+- [ ] **ColorOS freezes the app in the background.** `dumpsys location` logged `Freeze: true, Reason: FreezeControl` while SYPAU had no battery exemption. Expected to stop once the exemption above is granted; only a real zone crossing with the screen off will confirm it.
+- [x] **Stale v2 database crashes startup.** Schema v3 adds `profiles.isDefault` in place when a v2 file lacks it, keeping existing zones and profiles. Not reproduced on device (the broken file was already deleted).
 
-## Fixed this session
+## Fixed earlier this session
 
-- [x] **Confirm dialogs bounced on open** — spring removed from the entrance (`feedback.tsx`).
+- [x] **Confirm dialogs bounced on open** — spring removed from the entrance.
 
 ## Not tested yet
 
