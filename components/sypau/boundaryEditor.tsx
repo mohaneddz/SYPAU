@@ -62,52 +62,62 @@ export function BoundaryEditor({
   const mapControl = useRef<ZoneMapHandle | null>(null);
   const [selectedVertex, setSelectedVertex] = useState<number | null>(null);
   const [tracing, setTracing] = useState(false);
-  const traceBuffer = useRef<LatLng[]>([]);
+  // Taps arrive faster than renders, so they read the latest draft from here.
+  // The draft is the only copy of the points: a separate trace buffer used to
+  // survive undo and clear, and the next tap brought the old points back.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  // A tap on a handle also reaches the map underneath; without this the same
+  // tap that picks a point would drop a new one beside it.
+  const handleTappedAt = useRef(0);
 
   const geometry = draftToGeometry(draft);
 
   const handleMapPress = useCallback(
     (point: LatLng) => {
+      if (Date.now() - handleTappedAt.current < HANDLE_TAP_GRACE_MS) return;
+      const current = draftRef.current;
       Haptics.selectionAsync().catch(() => {});
 
-      if (draft.type === 'radius') {
-        onChange({ ...draft, center: point });
+      if (current.type === 'radius') {
+        onChange({ ...current, center: point });
         return;
       }
 
-      if (draft.type === 'polygon') {
-        // A selected vertex means the next tap moves it rather than adding one.
-        if (selectedVertex !== null) {
-          const points = [...draft.points];
-          points[selectedVertex] = point;
-          onChange({ ...draft, points });
-          setSelectedVertex(null);
-          return;
-        }
-        onChange({ ...draft, points: [...draft.points, point] });
+      // A picked point waits for this tap to say where it goes.
+      if (selectedVertex !== null) {
+        const points = [...current.points];
+        points[selectedVertex] = point;
+        onChange({ ...current, points });
+        setSelectedVertex(null);
+        return;
+      }
+
+      if (current.type === 'polygon' || tracing) {
+        onChange({ ...current, points: [...current.points, point] });
       }
     },
-    [draft, onChange, selectedVertex]
+    [onChange, selectedVertex, tracing]
   );
 
-  const appendTracePoint = useCallback((point: LatLng) => {
-    traceBuffer.current = [...traceBuffer.current, point];
-    // Shown live so the user can see the shape forming as they tap.
-    if (traceBuffer.current.length >= 3) {
-      onChange({ type: 'freehand', points: [...traceBuffer.current] });
-    }
-  }, [onChange]);
+  const pickVertex = (index: number) => {
+    handleTappedAt.current = Date.now();
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedVertex((current) => (current === index ? null : index));
+  };
 
-  const finishTrace = useCallback(() => {
-    // Simplified on commit rather than per tap, so undo still steps back
-    // through the points the user actually placed.
-    const traced = simplifyPath(traceBuffer.current, 10);
-    traceBuffer.current = [];
+  const finishTrace = () => {
     setTracing(false);
-    if (traced.length >= 3) onChange({ type: 'freehand', points: traced });
-  }, [onChange]);
+    // Simplified on commit rather than per tap, so undo while tracing still
+    // steps back through the points the user actually placed.
+    const current = draftRef.current;
+    if (current.type === 'freehand' && current.points.length >= 3) {
+      onChange({ type: 'freehand', points: simplifyPath(current.points, 10) });
+    }
+  };
 
   const undo = () => {
+    setSelectedVertex(null);
     if (draft.type === 'radius') {
       onChange({ ...draft, center: null });
       return;
@@ -116,12 +126,12 @@ export function BoundaryEditor({
   };
 
   const clear = () => {
+    setSelectedVertex(null);
     if (draft.type === 'radius') {
       onChange({ ...draft, center: null });
       return;
     }
     onChange({ ...draft, points: [] });
-    setSelectedVertex(null);
   };
 
   const pointCount = draft.type === 'radius' ? (draft.center ? 1 : 0) : draft.points.length;
@@ -134,25 +144,23 @@ export function BoundaryEditor({
           userLocation={userLocation}
           center={userLocation}
           controlRef={mapControl}
-          onPress={
-            draft.type === 'freehand' && tracing ? appendTracePoint : handleMapPress
-          }
+          onPress={handleMapPress}
           style={StyleSheet.absoluteFill}>
-          {draft.type === 'polygon'
+          {draft.type !== 'radius'
             ? draft.points.map((point, index) => (
                 <VertexHandle
                   key={`${point.latitude},${point.longitude},${index}`}
                   point={point}
                   selected={selectedVertex === index}
-                  onPress={() =>
-                    setSelectedVertex((current) => (current === index ? null : index))
-                  }
+                  // While tracing, every tap adds a point; picking one up would
+                  // swallow taps that land near an existing handle.
+                  onPress={tracing ? undefined : () => pickVertex(index)}
                 />
               ))
             : null}
 
           {draft.type === 'radius' && draft.center ? (
-            <VertexHandle point={draft.center} selected />
+            <VertexHandle point={draft.center} />
           ) : null}
 
           {/* The pin at the heart of the shape, as in the reference. */}
@@ -178,7 +186,19 @@ export function BoundaryEditor({
       </View>
 
       <View style={styles.editControls}>
-        {draft.type === 'freehand' ? (
+        {selectedVertex !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setSelectedVertex(null)}
+            style={[styles.editButton, styles.editButtonActive]}>
+            <SypauIcon name="close" size={16} color={SypauColor.paperInk} />
+            <SypauText variant="labelSm" caps color={SypauColor.paperInk}>
+              Cancel move
+            </SypauText>
+          </Pressable>
+        ) : null}
+
+        {selectedVertex === null && draft.type === 'freehand' ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -186,7 +206,7 @@ export function BoundaryEditor({
                 finishTrace();
                 return;
               }
-              traceBuffer.current = [];
+              setSelectedVertex(null);
               setTracing(true);
             }}
             style={[styles.editButton, tracing && styles.editButtonActive]}>
@@ -204,7 +224,7 @@ export function BoundaryEditor({
           </Pressable>
         ) : null}
 
-        {pointCount > 0 ? (
+        {selectedVertex === null && pointCount > 0 ? (
           <>
             <Pressable accessibilityRole="button" onPress={undo} style={styles.editButton}>
               <SypauIcon name="undo" size={16} />
@@ -236,14 +256,18 @@ function hintFor(draft: BoundaryDraft, tracing: boolean, selectedVertex: number 
   if (draft.type === 'radius') {
     return draft.center ? 'Drag the slider to size it' : 'Tap the map to place the centre';
   }
+  if (selectedVertex !== null) return `Tap where point ${selectedVertex + 1} should go`;
   if (draft.type === 'freehand') {
     if (tracing) return 'Tap along your boundary, then stop tracing';
-    return draft.points.length >= 3 ? `${draft.points.length} points` : 'Start tracing to draw';
+    return draft.points.length >= 3
+      ? `${draft.points.length} points — tap one to move it`
+      : 'Start tracing to draw';
   }
-  if (selectedVertex !== null) return 'Tap where this point should go';
   if (draft.points.length < 3) return `Tap to place points — ${3 - draft.points.length} more`;
   return `${draft.points.length} points — tap one to move it`;
 }
+
+const HANDLE_TAP_GRACE_MS = 350;
 
 function MapButton({
   icon,

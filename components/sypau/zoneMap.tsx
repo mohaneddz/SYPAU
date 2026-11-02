@@ -304,10 +304,10 @@ export function VertexHandle({
 }) {
   return (
     <Marker lngLat={toLngLat(point)} anchor="center">
-      <View
-        onTouchEnd={onPress}
-        style={[styles.vertex, selected && styles.vertexSelected]}
-      />
+      {/* The dot is 16 px; a fingertip needs a target closer to 44. */}
+      <View onTouchEnd={onPress} style={styles.vertexTarget}>
+        <View style={[styles.vertex, selected && styles.vertexSelected]} />
+      </View>
     </Marker>
   );
 }
@@ -336,6 +336,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: SypauColor.ink,
   },
+  vertexTarget: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   vertex: {
     width: 16,
     height: 16,
@@ -344,8 +345,10 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: SypauColor.cyan,
   },
+  // Picked up and waiting for a destination: big and red enough to see at a glance.
   vertexSelected: {
     borderColor: SypauColor.red,
-    transform: [{ scale: 1.25 }],
+    backgroundColor: SypauColor.red,
+    transform: [{ scale: 1.5 }],
   },
 });
