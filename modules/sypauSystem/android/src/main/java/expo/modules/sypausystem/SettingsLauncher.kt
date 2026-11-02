@@ -53,8 +53,19 @@ class SettingsLauncher(private val context: Context) {
 
   fun openAirplaneModeSettings(): Boolean = launch(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS))
 
-  fun openBatteryOptimizationSettings(): Boolean =
-    launch(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+  /**
+   * The direct request adds SYPAU to Android's own exemption list, which is what
+   * the permission check reads. The settings list below it can land on an OEM
+   * screen (ColorOS "Allow background usage") whose switch Android doesn't see.
+   */
+  fun openBatteryOptimizationSettings(): Boolean {
+    val request = Intent(
+      Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+      Uri.fromParts("package", context.packageName, null)
+    )
+    if (launch(request)) return true
+    return launch(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+  }
 
   private fun launch(intent: Intent): Boolean = try {
     // No activity in the stack when called from a background transition.
