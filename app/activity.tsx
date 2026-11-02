@@ -152,7 +152,7 @@ export default function ActivityRoute() {
 
                   <View style={styles.eventText}>
                     <View style={styles.eventTitleRow}>
-                      <SypauText variant="bodyMedium" style={styles.eventTitle} numberOfLines={1}>
+                      <SypauText variant="bodyMedium" style={styles.eventTitle} numberOfLines={2}>
                         {event.title}
                       </SypauText>
                       <SypauText variant="bodySm" color={SypauColor.boneFaint}>

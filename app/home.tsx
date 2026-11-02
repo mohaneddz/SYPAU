@@ -209,7 +209,7 @@ function StateCard({
   const message = !automationEnabled
     ? 'Automation is off.\nNothing will change on its own.'
     : zoneName
-      ? 'You’re inside your zone.\nSilence is in control.'
+      ? `You’re inside your zone.\n${profileName ?? 'Its profile'} is in control.`
       : 'No zone claims you.\nYour phone is yours.';
 
   return (
