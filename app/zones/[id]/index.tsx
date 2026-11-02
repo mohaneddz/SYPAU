@@ -138,7 +138,14 @@ export default function ZoneDetailRoute() {
           />
           <View style={styles.mapCaption}>
             <SypauIcon name="locate" size={14} color={SypauColor.boneMuted} />
-            <SypauText variant="label" caps color={SypauColor.boneMuted}>
+            <SypauText
+              variant="labelSm"
+              caps
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              color={SypauColor.boneMuted}
+              style={styles.flex}>
               {radiusCaption(zone)}
             </SypauText>
           </View>
@@ -439,7 +446,7 @@ function radiusCaption(zone: Zone): string {
   // A polygon has no radius; its width across reads truer than the bounding
   // circle's radius did.
   return circle
-    ? `~${Math.round(circle.radiusMeters * 2)}m across · ${formatArea(geometryArea(zone.geometry))}`
+    ? `${Math.round(circle.radiusMeters * 2)}m wide · ${formatArea(geometryArea(zone.geometry))}`
     : '—';
 }
 
