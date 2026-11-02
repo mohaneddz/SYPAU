@@ -36,6 +36,25 @@ Dev client build, 2026-11-02. Checked boxes are fixed; "verified" means seen on 
 - [ ] **ColorOS freezes the app in the background.** `dumpsys location` logged `Freeze: true, Reason: FreezeControl` while SYPAU had no battery exemption. Expected to stop once the exemption above is granted; only a real zone crossing with the screen off will confirm it.
 - [x] **Stale v2 database crashes startup.** Schema v3 adds `profiles.isDefault` in place when a v2 file lacks it, keeping existing zones and profiles. Not reproduced on device (the broken file was already deleted).
 
+## Second pass (zone and profile management)
+
+Tested: duplicate, pause/resume, edit and delete a zone; profile detail and editor; coverage map; activity filters and search; the rest of Settings.
+
+- [x] **Traced points came back after Undo/Clear.** Trace kept its own buffer that Undo and Clear never touched. The draft is now the only copy. Verified.
+- [x] **Picking up a boundary point never worked.** Android delivers taps on map markers to the map, so the dot's own handler never fired and a new point was dropped instead. Points are now hit-tested from the map press (about a fingertip), turn red, and wait for the next tap; Cancel move backs out. Verified.
+- [x] **Radius only stepped by 25 m.** It can be typed, down to 10 m, with a warning under 50 m. Verified at 32 m.
+- [x] **"Modify system settings" switch was greyed out.** `WRITE_SETTINGS` wasn't declared. Verified after a rebuild.
+- [x] **No icon looked selected on a new zone.** The default (pin) was last in the row, off screen. Moved first.
+- [x] **Duplicated zone names were cut off on cards** ("TESTZON…"). Names shrink to fit.
+- [x] **Zone detail categories at mismatched sizes** ("CLASS" large, "PRIORITY 10" tiny). Labels wrap at one size.
+- [x] **Home said "Silence is in control" for a ringing profile.** It names the profile now.
+- [x] **Profile editor showed the bottom nav and create button** over the form, and dropped unsaved edits on back. Nav hidden, discard guard added. Verified.
+- [x] **Profile editor repeated headings** ("Vibration / Vibration", "Do Not Disturb / Do Not Disturb"). One "Interruptions" section.
+- [x] **Activity titles truncated** ("Watching your zones …"). Two lines allowed.
+- [x] **Status notification options wrapped unevenly.** Sublabels replaced by one hint line under the picker. Verified.
+- [x] **Mute behaviour → Profile**, each card with the profile's own icon and a New profile card.
+- [x] **Pinned status notification** setting: off, in a zone, in a non-default mode, always. Verified ("Normal · musala").
+
 ## Fixed earlier this session
 
 - [x] **Confirm dialogs bounced on open** — spring removed from the entrance.
