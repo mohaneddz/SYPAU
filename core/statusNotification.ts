@@ -7,12 +7,20 @@ import { getNotifications } from '@/utils/notifications';
 const STATUS_ID = 'sypauStatus';
 const STATUS_CHANNEL = 'sypauStatus';
 
-export const STATUS_NOTIFICATION_OPTIONS: { value: StatusNotificationMode; label: string; sublabel: string }[] = [
-  { value: 'off', label: 'Off', sublabel: 'Never' },
-  { value: 'inZone', label: 'In a zone', sublabel: 'Any zone' },
-  { value: 'profileActive', label: 'In a mode', sublabel: 'Not default' },
-  { value: 'always', label: 'Always', sublabel: 'Pinned' },
+export const STATUS_NOTIFICATION_OPTIONS: { value: StatusNotificationMode; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'inZone', label: 'In a zone' },
+  { value: 'profileActive', label: 'In a mode' },
+  { value: 'always', label: 'Always' },
 ];
+
+/** Said under the picker, since four sublabels wrapped unevenly in the segments. */
+export const STATUS_NOTIFICATION_HINTS: Record<StatusNotificationMode, string> = {
+  off: 'Never shown.',
+  inZone: 'Shown while you’re inside any zone.',
+  profileActive: 'Shown while a profile other than your default holds the phone.',
+  always: 'Always pinned, even outside your zones.',
+};
 
 type StatusInput = {
   state: EngineState;

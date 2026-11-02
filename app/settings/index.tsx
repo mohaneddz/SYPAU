@@ -17,7 +17,7 @@ import { Grain } from '@/components/sypau/texture';
 import { TornEdge } from '@/components/sypau/tornEdge';
 import Svg, { Circle } from 'react-native-svg';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
-import { STATUS_NOTIFICATION_OPTIONS } from '@/core/statusNotification';
+import { STATUS_NOTIFICATION_HINTS, STATUS_NOTIFICATION_OPTIONS } from '@/core/statusNotification';
 import { listEvents } from '@/db/events';
 import { listProfiles } from '@/db/profiles';
 import { resetAllData } from '@/db/settings';
@@ -193,6 +193,9 @@ export default function SettingsRoute() {
             onChange={(statusNotification) => update({ statusNotification })}
             style={styles.trackingSegmented}
           />
+          <SypauText variant="bodySm" color={SypauColor.boneFaint}>
+            {STATUS_NOTIFICATION_HINTS[settings.statusNotification]}
+          </SypauText>
         </View>
       </Group>
 
