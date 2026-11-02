@@ -259,6 +259,7 @@ export function ZoneForm({ existing }: ZoneFormProps) {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.bleed}
           contentContainerStyle={styles.iconRow}
           accessibilityRole="radiogroup"
           accessibilityLabel="Zone icon">
@@ -475,6 +476,7 @@ function BehaviourPicker({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.bleed}
       contentContainerStyle={styles.behaviours}
       accessibilityRole="radiogroup">
       {profiles.map((profile) => {
@@ -777,7 +779,10 @@ const styles = StyleSheet.create({
     paddingVertical: SypauSpace.xs,
   },
 
-  iconRow: { gap: SypauSpace.sm, paddingVertical: 2 },
+  // Horizontal rows run to the sheet's edge, so a clipped item reads as more to
+  // scroll rather than as a card cut off by the padding.
+  bleed: { marginHorizontal: -SypauSpace.lg },
+  iconRow: { gap: SypauSpace.sm, paddingVertical: 2, paddingHorizontal: SypauSpace.lg },
   iconChoice: {
     width: 40,
     height: 40,
@@ -790,7 +795,7 @@ const styles = StyleSheet.create({
   },
   iconChoiceSelected: { backgroundColor: SypauColor.paper, borderColor: SypauColor.paper },
 
-  behaviours: { gap: SypauSpace.sm },
+  behaviours: { gap: SypauSpace.sm, paddingHorizontal: SypauSpace.lg },
   behaviour: {
     width: 196,
     flexDirection: 'row',

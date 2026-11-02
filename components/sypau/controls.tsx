@@ -57,6 +57,9 @@ export function RedButton({
           <SypauText
             variant="cardTitle"
             caps
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
             color={solid ? SypauColor.bone : SypauColor.red}
             align="center">
             {label}
@@ -189,6 +192,9 @@ export function Segmented<T extends string>({ options, value, onChange, style }:
               <SypauText
                 variant="label"
                 caps
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
                 color={selected ? SypauColor.paperInk : SypauColor.bone}>
                 {option.label}
               </SypauText>
@@ -262,9 +268,10 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SypauSpace.sm,
+    justifyContent: 'center',
+    gap: SypauSpace.xs,
     paddingVertical: SypauSpace.md,
-    paddingHorizontal: SypauSpace.md,
+    paddingHorizontal: SypauSpace.sm,
   },
   segmentSelected: { backgroundColor: SypauColor.cyan },
   segmentDivider: {

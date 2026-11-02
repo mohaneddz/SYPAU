@@ -121,7 +121,16 @@ export function SypauHeader({
       <View style={styles.center}>
         {handTitle ? null : <RedCross size={16} />}
         {handTitle ? (
-          <SypauText variant="hand" caps align="center" style={styles.handTitle}>
+          // One line only: a wrapped second line falls outside the header strip,
+          // which is how "Activity Log" ended up reading as just "Activity".
+          <SypauText
+            variant="hand"
+            caps
+            align="center"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+            style={styles.handTitle}>
             {title}
           </SypauText>
         ) : wordmark ? (
@@ -129,7 +138,13 @@ export function SypauHeader({
             SYPAU
           </SypauText>
         ) : (
-          <SypauText variant="cardTitle" caps align="center">
+          <SypauText
+            variant="cardTitle"
+            caps
+            align="center"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}>
             {title}
           </SypauText>
         )}

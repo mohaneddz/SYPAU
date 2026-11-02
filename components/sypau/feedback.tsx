@@ -209,8 +209,8 @@ const styles = StyleSheet.create({
     gap: SypauSpace.md,
     marginTop: SypauSpace.sm,
   },
-  dialogCancel: { paddingVertical: SypauSpace.lg, paddingHorizontal: SypauSpace.lg },
-  dialogConfirm: { flex: 1 },
+  dialogCancel: { paddingVertical: SypauSpace.lg, paddingHorizontal: SypauSpace.sm },
+  dialogConfirm: { flex: 1, paddingHorizontal: SypauSpace.md },
 
   pressed: { opacity: 0.75 },
 });
