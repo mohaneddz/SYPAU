@@ -103,7 +103,7 @@ export function SypauConfirmDialog({
         />
 
         <Animated.View
-          entering={FadeInDown.duration(220).springify().damping(18)}
+          entering={FadeInDown.duration(200)}
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
           style={styles.dialog}
           accessibilityViewIsModal
