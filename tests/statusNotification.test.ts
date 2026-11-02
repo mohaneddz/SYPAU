@@ -5,8 +5,9 @@ import { makeProfile, makeSettings, makeZone } from './factories';
 
 const normal = makeProfile({ id: 'normal', name: 'Normal', isDefault: true });
 const sleep = makeProfile({ id: 'sleep', name: 'Sleep' });
-const bedroom = makeZone({ id: 'bedroom', name: 'Bedroom', profileId: 'sleep' });
-const office = makeZone({ id: 'office', name: 'Office', profileId: 'normal' });
+const center = { latitude: 36.7538, longitude: 3.0588 };
+const bedroom = makeZone({ id: 'bedroom', name: 'Bedroom', profileId: 'sleep', center, radiusMeters: 30 });
+const office = makeZone({ id: 'office', name: 'Office', profileId: 'normal', center, radiusMeters: 80 });
 
 const profiles = [normal, sleep];
 const zones = [bedroom, office];
