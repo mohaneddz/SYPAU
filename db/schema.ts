@@ -1,11 +1,12 @@
 /**
- * Schema v2. The v1 tables (folds, alarms) belonged to the retired
+ * Schema v3. The v1 tables (folds, alarms) belonged to the retired
  * "Silence Origami" concept and are dropped on migration — the concepts don't
  * map across, and shipping a half-translated fold would be worse than a clean
- * start on a pre-release app.
+ * start on a pre-release app. v3 changes no tables: it repairs v2 files
+ * created before profiles.isDefault existed (see migrate in client.ts).
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const CREATE_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS profiles (
