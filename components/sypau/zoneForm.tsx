@@ -286,7 +286,7 @@ export function ZoneForm({ existing }: ZoneFormProps) {
           })}
         </ScrollView>
 
-        <SectionTitle>Mute behaviour</SectionTitle>
+        <SectionTitle>Profile</SectionTitle>
         <BehaviourPicker profiles={profiles} value={profileId} onChange={setProfileId} />
 
         <SectionTitle>Boundary type</SectionTitle>
@@ -502,11 +502,14 @@ function BehaviourPicker({
             }}
             style={[styles.behaviour, selected && styles.behaviourSelected]}>
             {selected ? <Grain variant="paper" opacity={0.18} /> : null}
-            <Image
-              source={SypauAsset.emblem}
-              style={[styles.behaviourEmblem, !selected && styles.behaviourEmblemIdle]}
-              contentFit="contain"
-            />
+            {/* The profile's own icon: the app emblem on every card told them apart by nothing. */}
+            <View style={[styles.behaviourIcon, selected && styles.behaviourIconSelected]}>
+              <SypauIcon
+                name={profile.icon}
+                size={20}
+                color={selected ? SypauColor.paperInk : SypauColor.cyan}
+              />
+            </View>
             <View style={styles.flex}>
               <SypauText
                 variant="label"
@@ -525,6 +528,24 @@ function BehaviourPicker({
           </Pressable>
         );
       })}
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create a new profile"
+        onPress={() => router.push('/profiles/create')}
+        style={[styles.behaviour, styles.behaviourNew]}>
+        <View style={styles.behaviourIcon}>
+          <SypauIcon name="plus" size={20} color={SypauColor.boneMuted} />
+        </View>
+        <View style={styles.flex}>
+          <SypauText variant="label" caps>
+            New profile
+          </SypauText>
+          <SypauText variant="bodySm" color={SypauColor.boneFaint} numberOfLines={2}>
+            Your own mix of ringer, volume and Do Not Disturb.
+          </SypauText>
+        </View>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -565,13 +586,22 @@ function RadiusStepper({
       value={value}
       suffix="m"
       step={25}
-      min={50}
+      min={RADIUS_MIN}
       max={5000}
       onChange={onChange}
-      hint="Android needs at least 50 m to watch a zone reliably."
+      editable
+      hint={
+        value < RELIABLE_RADIUS
+          ? `Under ${RELIABLE_RADIUS} m, Android may notice you late or not at all.`
+          : 'Tap the number to type an exact radius.'
+      }
     />
   );
 }
+
+/** Small zones are allowed, but warned about: GPS drift alone can exceed them. */
+const RADIUS_MIN = 10;
+const RELIABLE_RADIUS = 50;
 
 function Stepper({
   label,
@@ -582,6 +612,7 @@ function Stepper({
   min = 0,
   max = 100,
   hint,
+  editable = false,
 }: {
   label: string;
   value: number;
@@ -591,7 +622,19 @@ function Stepper({
   min?: number;
   max?: number;
   hint?: string;
+  /** Lets the value be typed, not just stepped. */
+  editable?: boolean;
 }) {
+  // Held as text while typing, so clearing the field to retype doesn't snap
+  // straight back to the minimum.
+  const [typed, setTyped] = useState<string | null>(null);
+  const commitTyped = () => {
+    if (typed === null) return;
+    const parsed = parseInt(typed, 10);
+    if (!Number.isNaN(parsed)) onChange(Math.min(max, Math.max(min, parsed)));
+    setTyped(null);
+  };
+
   return (
     <View style={styles.stepper}>
       <View style={styles.stepperText}>
@@ -612,10 +655,30 @@ function Stepper({
           disabled={value <= min}
           onPress={() => onChange(Math.max(min, value - step))}
         />
-        <SypauText variant="cardTitle" color={SypauColor.cyan} style={styles.stepperValue}>
-          {value}
-          {suffix}
-        </SypauText>
+        {editable ? (
+          <View style={styles.stepperField}>
+            <TextInput
+              value={typed ?? String(value)}
+              onChangeText={(text) => setTyped(text.replace(/[^0-9]/g, ''))}
+              onEndEditing={commitTyped}
+              onSubmitEditing={commitTyped}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              selectTextOnFocus
+              maxLength={String(max).length}
+              accessibilityLabel={label}
+              style={styles.stepperInput}
+            />
+            <SypauText variant="cardTitle" color={SypauColor.cyan}>
+              {suffix}
+            </SypauText>
+          </View>
+        ) : (
+          <SypauText variant="cardTitle" color={SypauColor.cyan} style={styles.stepperValue}>
+            {value}
+            {suffix}
+          </SypauText>
+        )}
         <StepButton
           icon="plus"
           label={`Increase ${label}`}
@@ -809,8 +872,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   behaviourSelected: { backgroundColor: SypauColor.cyan, borderColor: SypauColor.cyan },
-  behaviourEmblem: { width: 44, height: 40 },
-  behaviourEmblemIdle: { opacity: 0.55 },
+  behaviourIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SypauColor.hairline,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  behaviourIconSelected: { borderColor: 'rgba(20,20,18,0.35)' },
+  behaviourNew: { borderStyle: 'dashed', borderColor: SypauColor.boneFaint },
 
   toggleCard: {
     flexDirection: 'row',
@@ -858,6 +930,22 @@ const styles = StyleSheet.create({
   stepperText: { flex: 1, gap: 2 },
   stepperControls: { flexDirection: 'row', alignItems: 'center', gap: SypauSpace.sm },
   stepperValue: { minWidth: 62, textAlign: 'center' },
+  stepperField: {
+    minWidth: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: SypauColor.cyanDim,
+  },
+  stepperInput: {
+    color: SypauColor.cyan,
+    fontFamily: SypauFont.display,
+    fontSize: 22,
+    paddingVertical: 0,
+    minWidth: 40,
+    textAlign: 'right',
+  },
   stepButton: {
     width: 34,
     height: 34,
