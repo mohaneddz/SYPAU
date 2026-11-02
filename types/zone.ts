@@ -12,7 +12,10 @@ export type ZoneIcon =
   | 'coffee'
   | 'pin';
 
+// The default first: last in the row, it sat off-screen and a new zone looked
+// as if no icon had been chosen.
 export const ZONE_ICONS: ZoneIcon[] = [
+  'pin',
   'home',
   'school',
   'book',
@@ -20,7 +23,6 @@ export const ZONE_ICONS: ZoneIcon[] = [
   'dumbbell',
   'moon',
   'coffee',
-  'pin',
 ];
 
 /** What should happen once the user leaves this zone. */
