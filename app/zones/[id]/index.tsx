@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { goToTab } from '@/components/sypau/bottomNav';
 import { DarkCard } from '@/components/sypau/cards';
 import { SypauConfirmDialog } from '@/components/sypau/feedback';
 import { HandUnderline, RedCross } from '@/components/sypau/header';
@@ -97,7 +98,12 @@ export default function ZoneDetailRoute() {
           <View style={styles.nameCross}>
             <RedCross size={20} />
           </View>
-          <Display numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+          {/* A single word gets one line: allowed two, Android splits it mid-word
+              rather than shrinking it. */}
+          <Display
+            numberOfLines={/\s/.test(zone.name.trim()) ? 2 : 1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.4}>
             {zone.name}
           </Display>
 
@@ -151,7 +157,7 @@ export default function ZoneDetailRoute() {
               label={profile?.name ?? 'No profile'}
               color={profile ? SypauColor.amber : SypauColor.boneFaint}
             />
-            <Category icon="shield" label={`P${zone.priority}`} />
+            <Category icon="shield" label={`Priority ${zone.priority}`} />
           </View>
         </DarkCard>
 
@@ -308,7 +314,7 @@ export default function ZoneDetailRoute() {
         onConfirm={() => {
           setPendingDelete(false);
           remove(zone.id);
-          router.replace('/zones');
+          goToTab('/zones');
         }}
       />
     </SypauScaffold>
@@ -430,7 +436,11 @@ function ActionButton({
 function radiusCaption(zone: Zone): string {
   if (zone.geometry.type === 'circle') return `${Math.round(zone.geometry.radiusMeters)}m radius`;
   const circle = boundingCircle(zone.geometry.points);
-  return circle ? `~${Math.round(circle.radiusMeters)}m · ${formatArea(geometryArea(zone.geometry))}` : '—';
+  // A polygon has no radius; its width across reads truer than the bounding
+  // circle's radius did.
+  return circle
+    ? `~${Math.round(circle.radiusMeters * 2)}m across · ${formatArea(geometryArea(zone.geometry))}`
+    : '—';
 }
 
 function delayPhrase(seconds: number, where: 'inside' | 'outside'): string {

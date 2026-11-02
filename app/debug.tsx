@@ -24,6 +24,8 @@ import { formatDistance } from '@/utils/geometry';
 
 type SelfTestResult = { label: string; passed: boolean; detail: string };
 
+const FRESH_FIX_MS = 60_000;
+
 export default function DebugRoute() {
   const fix = useEngineStore((s) => s.fix);
   const engine = useEngineStore((s) => s.engine);
@@ -35,6 +37,15 @@ export default function DebugRoute() {
 
   const zones = useZoneStore((s) => s.zones);
   const settings = useSettingsStore((s) => s.settings);
+
+  // The position watch only reports movement, so a phone left on a desk keeps
+  // an old fix indefinitely. The clock ticks so "Live" lapses when it should.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  const fixFresh = fix !== null && now - fix.timestamp < FRESH_FIX_MS;
 
   const [selfTest, setSelfTest] = useState<SelfTestResult[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -153,7 +164,10 @@ export default function DebugRoute() {
           <SypauText variant="label" caps style={styles.flex}>
             Fix
           </SypauText>
-          <StatusChip label={fix ? 'Live' : 'Waiting'} tone={fix ? 'cyan' : 'neutral'} />
+          <StatusChip
+            label={!fix ? 'Waiting' : fixFresh ? 'Live' : `Stale · ${formatAgo(fix.timestamp)}`}
+            tone={!fix ? 'neutral' : fixFresh ? 'cyan' : 'amber'}
+          />
         </View>
 
         <View style={styles.split}>
