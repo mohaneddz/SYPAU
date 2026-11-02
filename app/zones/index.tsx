@@ -104,7 +104,12 @@ export default function ZonesRoute() {
               <View style={styles.cardInfo}>
                 <View style={styles.cardTitleRow}>
                   <View style={styles.cardTitleText}>
-                    <SypauText variant="cardTitle" caps numberOfLines={1}>
+                    <SypauText
+                      variant="cardTitle"
+                      caps
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.6}>
                       {zone.name}
                     </SypauText>
                     <View style={styles.statusRow}>

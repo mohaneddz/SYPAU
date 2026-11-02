@@ -366,13 +366,9 @@ function Category({
   return (
     <View style={styles.category}>
       <SypauIcon name={icon} size={24} color={color} />
-      <SypauText
-        variant="labelSm"
-        caps
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        align="center">
+      {/* Wraps at one size: shrinking to fit made "Class" large and
+          "Priority 10" tiny in the same row. */}
+      <SypauText variant="labelSm" caps numberOfLines={2} align="center">
         {label}
       </SypauText>
     </View>
