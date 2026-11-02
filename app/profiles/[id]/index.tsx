@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { goToTab } from '@/components/sypau/bottomNav';
 import { DarkCard } from '@/components/sypau/cards';
 import { RedButton, StatusChip } from '@/components/sypau/controls';
 import { SypauConfirmDialog } from '@/components/sypau/feedback';
@@ -89,7 +90,7 @@ export default function ProfileDetailRoute() {
     setPendingDelete(false);
 
     if (result.ok) {
-      router.replace('/profiles');
+      goToTab('/profiles');
       return;
     }
 

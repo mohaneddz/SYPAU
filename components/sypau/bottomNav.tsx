@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { usePathname, useRouter } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -24,8 +24,20 @@ const LEFT_ITEMS: NavItem[] = [
 
 const RIGHT_ITEMS: NavItem[] = [
   { route: '/activity', label: 'Activity', icon: 'activity' },
-  { route: '/profiles', label: 'Profile', icon: 'user', matches: ['/profiles', '/settings'] },
+  // The alarm profiles, not an account: named and drawn as the list it opens.
+  { route: '/profiles', label: 'Profiles', icon: 'layers', matches: ['/profiles', '/settings'] },
 ];
+
+/**
+ * Tabs reset to Home rather than piling onto the stack. Pushing each tab kept
+ * every screen ever visited underneath, so back from Profile could land on a
+ * zone opened two tabs earlier. Home is always the root (every entry path
+ * replaces into it), so this leaves at most [Home, tab].
+ */
+export function goToTab(route: string) {
+  if (router.canDismiss()) router.dismissAll();
+  if (route !== '/home') router.push(route as never);
+}
 
 type BottomNavProps = {
   onCreatePress: () => void;
@@ -36,7 +48,6 @@ type BottomNavProps = {
  * punched through it, per the zones reference.
  */
 export function SypauBottomNav({ onCreatePress }: BottomNavProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
@@ -56,7 +67,7 @@ export function SypauBottomNav({ onCreatePress }: BottomNavProps) {
         style={styles.tab}
         onPress={() => {
           Haptics.selectionAsync().catch(() => {});
-          router.navigate(item.route as never);
+          if (pathname !== item.route) goToTab(item.route);
         }}>
         <SypauIcon
           name={item.icon}

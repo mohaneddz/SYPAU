@@ -34,7 +34,7 @@ export default function ProfilesRoute() {
 
   if (profiles.length === 0) {
     return (
-      <SypauScaffold title="Profiles" showBack>
+      <SypauScaffold title="Profiles">
         <SypauEmptyState
           title="No profiles yet"
           description="A profile is how your phone should behave. Build one, then point a zone at it."
@@ -61,7 +61,6 @@ export default function ProfilesRoute() {
   return (
     <SypauScaffold
       wordmark
-      showBack
       headerRight={
         <Pressable
           accessibilityRole="button"

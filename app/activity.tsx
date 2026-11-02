@@ -65,7 +65,6 @@ export default function ActivityRoute() {
     <SypauScaffold
       title="Activity Log"
       handTitle
-      showBack
       headerRight={
         <View style={styles.headerActions}>
           <Pressable

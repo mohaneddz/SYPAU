@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { Children, isValidElement, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { goToTab } from '@/components/sypau/bottomNav';
 import { Segmented, SypauSwitch } from '@/components/sypau/controls';
 import { SypauConfirmDialog } from '@/components/sypau/feedback';
 import { RedCross } from '@/components/sypau/header';
@@ -91,17 +92,10 @@ export default function SettingsRoute() {
           onPress={() => router.push('/settings/permissions')}
         />
         <NavRow
-          icon="layers"
-          iconColor={SypauColor.red}
-          title="Alarm profiles"
-          description="How your phone behaves inside each zone"
-          onPress={() => router.push('/profiles')}
-        />
-        <NavRow
           icon="pin"
           title="Zones"
           description="Your boundaries, and the map of all of them"
-          onPress={() => router.push('/zones')}
+          onPress={() => goToTab('/zones')}
         />
       </Group>
 
