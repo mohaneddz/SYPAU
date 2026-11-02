@@ -23,7 +23,7 @@ import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/syp
 import { geometryArea } from '@/engine/geo';
 import { countEventsSince } from '@/db/events';
 import { useActivityStore } from '@/state/useActivityStore';
-import { useEngineStore } from '@/state/useEngineStore';
+import { useEngineStore, useIsWatching } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { useZoneStore } from '@/state/useZoneStore';
@@ -32,6 +32,7 @@ import { formatArea } from '@/utils/geometry';
 export default function HomeRoute() {
   const engine = useEngineStore((s) => s.engine);
   const fix = useEngineStore((s) => s.fix);
+  const watching = useIsWatching();
   const zones = useZoneStore((s) => s.zones);
   const profileById = useProfileStore((s) => s.byId);
   const settings = useSettingsStore((s) => s.settings);
@@ -70,7 +71,11 @@ export default function HomeRoute() {
           hitSlop={10}
           onPress={() => router.push('/activity')}>
           <SypauIcon name="bell" size={22} />
-          {todayCount > 0 ? <View style={styles.bellDot} /> : null}
+          {/* Lit only while the newest entry still needs attention, so a fixed
+              problem doesn't keep calling for a look. */}
+          {latestEvent && (latestEvent.severity === 'error' || latestEvent.severity === 'warning') ? (
+            <View style={styles.bellDot} />
+          ) : null}
         </Pressable>
       }>
       <SypauText variant="hand" color={SypauColor.red} align="center">
@@ -81,6 +86,8 @@ export default function HomeRoute() {
         zoneName={activeZone?.name ?? null}
         profileName={activeProfile?.name ?? null}
         automationEnabled={settings.automationEnabled}
+        watching={watching}
+        hasZones={zones.length > 0}
         reducedMotion={settings.reducedMotion}
       />
 
@@ -166,11 +173,15 @@ function StateCard({
   zoneName,
   profileName,
   automationEnabled,
+  watching,
+  hasZones,
   reducedMotion,
 }: {
   zoneName: string | null;
   profileName: string | null;
   automationEnabled: boolean;
+  watching: boolean;
+  hasZones: boolean;
   reducedMotion: boolean;
 }) {
   const pulse = useSharedValue(0);
@@ -237,11 +248,7 @@ function StateCard({
             {message}
           </SypauText>
 
-          <StatusChip
-            label={zoneName ? 'Zone active' : automationEnabled ? 'Watching' : 'Paused'}
-            tone={!automationEnabled ? 'amber' : zoneName ? 'cyan' : 'neutral'}
-            style={styles.stateChip}
-          />
+          <StatusChip {...stateChip(zoneName, automationEnabled, watching, hasZones)} style={styles.stateChip} />
 
           {profileName ? (
             <SypauText variant="labelSm" caps color={SypauColor.boneFaint}>
@@ -254,6 +261,19 @@ function StateCard({
       </View>
     </View>
   );
+}
+
+/** Says what is really listening, not just whether automation is switched on. */
+function stateChip(
+  zoneName: string | null,
+  automationEnabled: boolean,
+  watching: boolean,
+  hasZones: boolean
+): { label: string; tone: 'amber' | 'cyan' | 'neutral' } {
+  if (!automationEnabled) return { label: 'Paused', tone: 'amber' };
+  if (zoneName) return { label: 'Zone active', tone: 'cyan' };
+  if (!hasZones) return { label: 'No zones yet', tone: 'neutral' };
+  return watching ? { label: 'Watching', tone: 'neutral' } : { label: 'Not watching', tone: 'amber' };
 }
 
 /** The torn paper strip: what the active profile is actually doing right now. */
@@ -292,13 +312,22 @@ function EffectsStrip({
               </View>
             ) : null}
           </View>
-          <View>
-            <SypauText variant="labelSm" caps color={SypauColor.paperInk}>
+          <View style={styles.stripText}>
+            <SypauText
+              variant="labelSm"
+              caps
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              color={SypauColor.paperInk}>
               {item.label}
             </SypauText>
             <SypauText
               variant="labelSm"
               caps
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
               color={item.muted ? SypauColor.red : SypauColor.cyanDim}>
               {item.muted ? 'Muted' : item.onLabel}
             </SypauText>
@@ -390,7 +419,12 @@ function SilenceTimeCard({ activeSince }: { activeSince: number | null }) {
           <SypauText variant="cardTitle">
             {activeSince ? (hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`) : '—'}
           </SypauText>
-          <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+          <SypauText
+            variant="bodySm"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            color={SypauColor.boneMuted}>
             {activeSince ? 'So far' : 'Not active'}
           </SypauText>
         </View>
@@ -461,9 +495,10 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SypauSpace.sm,
-    paddingHorizontal: SypauSpace.sm,
+    gap: SypauSpace.xs,
+    paddingHorizontal: SypauSpace.xs,
   },
+  stripText: { flex: 1 },
   // The small red cross the reference pins to a muted category's icon.
   mutedBadge: {
     position: 'absolute',

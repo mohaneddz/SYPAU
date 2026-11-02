@@ -58,6 +58,12 @@ function evaluate(point: { latitude: number; longitude: number }) {
   }
 }
 
+/** Registration changed: re-read what's really running and pick up anything it logged. */
+function afterMonitoringChange() {
+  useEngineStore.getState().refreshNativeState();
+  useActivityStore.getState().load();
+}
+
 function recordFix(position: Location.LocationObject) {
   const point = {
     latitude: position.coords.latitude,
@@ -250,7 +256,7 @@ export function useSypauEngine(): void {
   useEffect(() => {
     const unsubscribe = useZoneStore.subscribe((state, previous) => {
       if (state.zones === previous.zones) return;
-      void syncGeofences(state.zones);
+      void syncGeofences(state.zones).then(afterMonitoringChange);
       // Re-judge where we stand against the new zones right away. The position
       // watch only fires on movement, so standing still after pausing,
       // redrawing or deleting the zone you're in would otherwise change nothing
@@ -274,9 +280,11 @@ export function useSypauEngine(): void {
       );
 
       if (settings.automationEnabled && settings.backgroundMonitoringEnabled) {
-        void startZoneMonitoring(settings.trackingMode, zones, activeZone?.name ?? null);
+        void startZoneMonitoring(settings.trackingMode, zones, activeZone?.name ?? null).then(
+          afterMonitoringChange
+        );
       } else {
-        void stopZoneMonitoring();
+        void stopZoneMonitoring().then(afterMonitoringChange);
       }
     };
 
@@ -302,6 +310,21 @@ export function useSypauEngine(): void {
       if (next !== 'active') return;
       useEngineStore.getState().refreshNativeState();
       void refreshLocation();
+
+      // Registration fails while background location is missing, and granting
+      // it in Settings doesn't tell us. Retry on return rather than waiting for
+      // the next zone edit to do it by accident.
+      const { settings } = useSettingsStore.getState();
+      const { zones } = useZoneStore.getState();
+      const { monitoring } = useEngineStore.getState();
+      if (
+        settings.automationEnabled &&
+        settings.backgroundMonitoringEnabled &&
+        zones.some((zone) => zone.enabled) &&
+        monitoring.registeredGeofences === 0
+      ) {
+        void syncGeofences(zones).then(afterMonitoringChange);
+      }
     });
     return () => subscription.remove();
   }, []);

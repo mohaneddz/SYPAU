@@ -13,7 +13,7 @@ import { Display, SypauText } from '@/components/sypau/text';
 import { ZoneMap } from '@/components/sypau/zoneMap';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { distanceToGeometry } from '@/engine/geo';
-import { useEngineStore } from '@/state/useEngineStore';
+import { useEngineStore, useIsWatching } from '@/state/useEngineStore';
 import { useProfileStore } from '@/state/useProfileStore';
 import { useZoneStore } from '@/state/useZoneStore';
 import { boundingCircle, formatDistance } from '@/utils/geometry';
@@ -28,13 +28,14 @@ export default function ZonesRoute() {
 
   const engine = useEngineStore((s) => s.engine);
   const fix = useEngineStore((s) => s.fix);
+  const watching = useIsWatching();
 
   const [menuZone, setMenuZone] = useState<Zone | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Zone | null>(null);
 
   if (zones.length === 0) {
     return (
-      <SypauScaffold title="My Zones" showBack>
+      <SypauScaffold title="My Zones">
         <SypauEmptyState
           art="map"
           title="No zones yet"
@@ -49,7 +50,6 @@ export default function ZonesRoute() {
   return (
     <SypauScaffold
       wordmark
-      showBack
       headerRight={<CoverageButton onPress={() => router.push('/zones/map')} />}>
       <View style={styles.heading}>
         <Image source={SypauAsset.foldedMap} style={styles.headingArt} contentFit="contain" />
@@ -76,7 +76,9 @@ export default function ZonesRoute() {
             ? { label: 'Active', color: SypauColor.cyan }
             : isInside
               ? { label: 'Inside', color: SypauColor.cyan }
-              : { label: 'Watching', color: SypauColor.boneMuted };
+              : watching
+                ? { label: 'Watching', color: SypauColor.boneMuted }
+                : { label: 'Not watched', color: SypauColor.amber };
 
         return (
           <DarkCard key={zone.id} highlighted={isActive}>
@@ -123,10 +125,10 @@ export default function ZonesRoute() {
                 <View style={styles.metaRow}>
                   <SypauIcon name="locate" size={14} color={SypauColor.boneMuted} />
                   <SypauText variant="bodySm" color={SypauColor.boneMuted} style={styles.flex}>
-                    Radius
+                    {zone.geometry.type === 'circle' ? 'Radius' : 'Across'}
                   </SypauText>
                   <SypauText variant="bodySm" color={SypauColor.bone}>
-                    {formatDistance(effectiveRadius(zone))}
+                    {formatDistance(zoneExtent(zone))}
                   </SypauText>
                   <SypauIcon name="chevron" size={18} color={SypauColor.red} />
                 </View>
@@ -216,10 +218,10 @@ export default function ZonesRoute() {
   );
 }
 
-/** Circles report their radius; a drawn shape, the circle Android watches for it. */
-function effectiveRadius(zone: Zone): number {
+/** Circles report their radius; a drawn shape has none, so its width across. */
+function zoneExtent(zone: Zone): number {
   if (zone.geometry.type === 'circle') return zone.geometry.radiusMeters;
-  return boundingCircle(zone.geometry.points)?.radiusMeters ?? 0;
+  return (boundingCircle(zone.geometry.points)?.radiusMeters ?? 0) * 2;
 }
 
 /** The round map button from the zones reference, opening every zone on one map. */

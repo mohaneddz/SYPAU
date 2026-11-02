@@ -114,6 +114,17 @@ export function listEventsForZone(zoneId: string, limit = 20): ActivityEvent[] {
     .map(fromRow);
 }
 
+/** The most recent of the given titles, for telling whether a failure was ever followed up. */
+export function latestEventTitle(titles: string[]): string | null {
+  if (titles.length === 0) return null;
+  const row = getDb().getFirstSync<{ title: string }>(
+    `SELECT title FROM activityEvents WHERE title IN (${titles.map(() => '?').join(', ')})
+     ORDER BY timestamp DESC LIMIT 1`,
+    ...titles
+  );
+  return row?.title ?? null;
+}
+
 export function countEventsSince(since: number): number {
   const row = getDb().getFirstSync<{ n: number }>(
     'SELECT COUNT(*) AS n FROM activityEvents WHERE timestamp >= ?',

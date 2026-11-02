@@ -1,12 +1,15 @@
 import * as Location from 'expo-location';
 
 import { registerGeofences, startMonitoring, stopMonitoring } from '@/core/nativeBridge';
-import { logEvent } from '@/db/events';
+import { latestEventTitle, logEvent } from '@/db/events';
 import { boundingCircle } from '@/utils/geometry';
 import type { TrackingMode } from '@/types/settings';
 import type { Zone } from '@/types/zone';
 
 export const LOCATION_TASK_NAME = 'sypauLocationTask';
+
+const WATCH_FAILED = 'Couldn’t watch your zones';
+const WATCH_RECOVERED = 'Watching your zones again';
 
 /**
  * How hard each mode works for a fix.
@@ -58,11 +61,22 @@ export async function syncGeofences(zones: Zone[]): Promise<number> {
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
   try {
-    return await registerGeofences(registrations);
+    const registered = await registerGeofences(registrations);
+    // Without this the failure stays the last word in the log, and on the
+    // home screen, long after the cause was fixed.
+    if (registered > 0 && latestEventTitle([WATCH_FAILED, WATCH_RECOVERED]) === WATCH_FAILED) {
+      logEvent({
+        category: 'system',
+        title: WATCH_RECOVERED,
+        description: `${registered} ${registered === 1 ? 'zone is' : 'zones are'} being watched.`,
+        severity: 'success',
+      });
+    }
+    return registered;
   } catch (error) {
     logEvent({
       category: 'error',
-      title: 'Couldn’t watch your zones',
+      title: WATCH_FAILED,
       description:
         error instanceof Error ? error.message : 'Android refused to register your zones.',
       severity: 'error',

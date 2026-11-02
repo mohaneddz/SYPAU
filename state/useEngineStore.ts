@@ -41,6 +41,17 @@ type EngineStore = {
   pushDiagnostic: (line: Omit<DiagnosticLine, 'id' | 'timestamp'>) => void;
 };
 
+/**
+ * Whether anything is actually listening for zone crossings: fences registered
+ * with the platform, or the location service running. "Automation on" alone
+ * says nothing about whether registration succeeded.
+ */
+export function useIsWatching(): boolean {
+  return useEngineStore(
+    (s) => s.monitoring.registeredGeofences > 0 || s.monitoring.running
+  );
+}
+
 /** Diagnostics are a live tail for the debug screen, not a persisted log. */
 const MAX_DIAGNOSTICS = 60;
 
