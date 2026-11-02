@@ -29,6 +29,8 @@ type Requirement = {
   essential: boolean;
   /** Where Android sends us when it can't be granted from a prompt. */
   settings: SettingsTarget;
+  /** Replaces "Android handles this one in its own settings" where it doesn't. */
+  intro?: string;
   /** What to do once there, said before we send anyone off to find it. */
   steps: string;
 };
@@ -96,7 +98,8 @@ const REQUIREMENTS: Requirement[] = [
     group: 'Reliability',
     essential: false,
     settings: 'batteryOptimization',
-    steps: 'Choose Unrestricted (or Don’t optimise) for SYPAU.',
+    intro: 'Android asks this one itself.',
+    steps: 'When it asks to let SYPAU always run in the background, tap Allow.',
   },
   {
     key: 'writeSystemSettings',
@@ -296,7 +299,7 @@ export function PermissionsScreen({ embedded = false }: PermissionsScreenProps) 
         title={explaining?.title ?? ''}
         message={
           explaining
-            ? `Android handles this one in its own settings. ${explaining.steps} SYPAU picks it up as soon as you come back.`
+            ? `${explaining.intro ?? 'Android handles this one in its own settings.'} ${explaining.steps} SYPAU picks it up as soon as you come back.`
             : ''
         }
         confirmLabel="Open settings"

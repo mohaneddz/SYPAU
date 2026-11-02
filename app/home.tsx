@@ -419,13 +419,8 @@ function SilenceTimeCard({ activeSince }: { activeSince: number | null }) {
           <SypauText variant="cardTitle">
             {activeSince ? (hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`) : '—'}
           </SypauText>
-          <SypauText
-            variant="bodySm"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
-            color={SypauColor.boneMuted}>
-            {activeSince ? 'So far' : 'Not active'}
+          <SypauText variant="bodySm" numberOfLines={1} color={SypauColor.boneMuted}>
+            {activeSince ? 'So far' : 'Off'}
           </SypauText>
         </View>
 
