@@ -1,9 +1,10 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useNavigation } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { PaperCard } from '@/components/sypau/cards';
 import { RedButton, SypauSwitch } from '@/components/sypau/controls';
+import { SypauConfirmDialog } from '@/components/sypau/feedback';
 import { SypauIcon } from '@/components/sypau/icon';
 import { SypauScaffold } from '@/components/sypau/scaffold';
 import { SectionTitle, SypauText } from '@/components/sypau/text';
@@ -40,6 +41,7 @@ type ProfileFormProps = {
  * they carry the reason and a shortcut to the screen that owns them.
  */
 export function ProfileForm({ existing }: ProfileFormProps) {
+  const navigation = useNavigation();
   const createProfile = useProfileStore((s) => s.create);
   const updateProfile = useProfileStore((s) => s.update);
   const capabilities = useEngineStore((s) => s.capabilities);
@@ -56,9 +58,29 @@ export function ProfileForm({ existing }: ProfileFormProps) {
 
   const nameError = attemptedSave && !name.trim() ? 'Give this profile a name.' : null;
 
+  const dirty = existing
+    ? name !== existing.name ||
+      icon !== existing.icon ||
+      isDefault !== existing.isDefault ||
+      JSON.stringify(config) !== JSON.stringify(existing.config)
+    : name.trim().length > 0 || JSON.stringify(config) !== JSON.stringify(EMPTY_PROFILE_CONFIG);
+
+  // Same guard as the zone form: a back gesture shouldn't silently drop a
+  // dozen settings someone just picked.
+  const saved = useRef(false);
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  useEffect(() => {
+    return navigation.addListener('beforeRemove', (event) => {
+      if (saved.current || !dirty) return;
+      event.preventDefault();
+      setPendingLeave(() => () => navigation.dispatch(event.data.action));
+    });
+  }, [navigation, dirty]);
+
   const save = () => {
     setAttemptedSave(true);
     if (!name.trim()) return;
+    saved.current = true;
 
     if (existing) {
       updateProfile(existing.id, { name: name.trim(), icon, config, isDefault });
@@ -71,7 +93,9 @@ export function ProfileForm({ existing }: ProfileFormProps) {
   };
 
   return (
-    <SypauScaffold title={existing ? 'Edit Profile' : 'Create Profile'} showBack>
+    // No bottom nav: its tabs and create button sat over the form, one stray
+    // tap from leaving an edit half done.
+    <SypauScaffold title={existing ? 'Edit Profile' : 'Create Profile'} showBack showNav={false}>
       <SectionTitle>Profile name</SectionTitle>
       <PaperCard tear="none" contentStyle={styles.inputCard}>
         <TextInput
@@ -161,7 +185,8 @@ export function ProfileForm({ existing }: ProfileFormProps) {
         onChange={(systemVolume) => patch({ systemVolume })}
       />
 
-      <SectionTitle>Vibration</SectionTitle>
+      {/* One heading over both: each used to repeat its own row label. */}
+      <SectionTitle>Interruptions</SectionTitle>
       <ChoiceRow<VibrationMode>
         label="Vibration"
         controlKey="vibration"
@@ -175,7 +200,6 @@ export function ProfileForm({ existing }: ProfileFormProps) {
         onChange={(vibrationMode) => patch({ vibrationMode })}
       />
 
-      <SectionTitle>Do Not Disturb</SectionTitle>
       <ChoiceRow<DndMode>
         label="Do Not Disturb"
         controlKey="dnd"
@@ -320,6 +344,27 @@ export function ProfileForm({ existing }: ProfileFormProps) {
       </View>
 
       <RedButton label="Save profile" onPress={save} />
+
+      <SypauConfirmDialog
+        visible={pendingLeave !== null}
+        destructive
+        icon="trash"
+        title={existing ? 'Discard changes?' : 'Discard this profile?'}
+        message={
+          existing
+            ? 'Your edits to this profile haven’t been saved.'
+            : 'The profile you’ve set up hasn’t been saved yet.'
+        }
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        onCancel={() => setPendingLeave(null)}
+        onConfirm={() => {
+          const leave = pendingLeave;
+          setPendingLeave(null);
+          saved.current = true;
+          leave?.();
+        }}
+      />
     </SypauScaffold>
   );
 }
