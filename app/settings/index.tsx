@@ -17,6 +17,7 @@ import { Grain } from '@/components/sypau/texture';
 import { TornEdge } from '@/components/sypau/tornEdge';
 import Svg, { Circle } from 'react-native-svg';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
+import { STATUS_NOTIFICATION_OPTIONS } from '@/core/statusNotification';
 import { listEvents } from '@/db/events';
 import { listProfiles } from '@/db/profiles';
 import { resetAllData } from '@/db/settings';
@@ -179,6 +180,22 @@ export default function SettingsRoute() {
       </Group>
 
       <SectionTitle>Notifications</SectionTitle>
+      <Group>
+        <View style={styles.blockRow}>
+          <SypauText variant="bodyMedium">Status in the notification bar</SypauText>
+          <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+            A quiet, pinned line saying which profile holds your phone. No sound, no banner.
+          </SypauText>
+
+          <Segmented
+            options={STATUS_NOTIFICATION_OPTIONS}
+            value={settings.statusNotification}
+            onChange={(statusNotification) => update({ statusNotification })}
+            style={styles.trackingSegmented}
+          />
+        </View>
+      </Group>
+
       <Group>
         <ToggleRow
           icon="bell"

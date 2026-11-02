@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 
 import { startZoneMonitoring, stopZoneMonitoring, syncGeofences } from '@/core/monitoring';
 import { setStartOnBoot, subscribeToSystemEvents } from '@/core/nativeBridge';
+import { syncStatusNotification } from '@/core/statusNotification';
 import { applyTransition, resolveActiveZone } from '@/core/zoneEngine';
 import { saveEngineState } from '@/db/engineState';
 import { getZone } from '@/db/zones';
@@ -301,6 +302,29 @@ export function useSypauEngine(): void {
         reevaluateLastFix();
       }
     });
+  }, []);
+
+  // The pinned status notification follows the engine, the setting and any
+  // rename of the zone or profile it names.
+  useEffect(() => {
+    const sync = () =>
+      void syncStatusNotification({
+        state: useEngineStore.getState().engine,
+        settings: useSettingsStore.getState().settings,
+        zones: useZoneStore.getState().zones,
+        profiles: useProfileStore.getState().profiles,
+      });
+
+    sync();
+    const unsubscribers = [
+      useEngineStore.subscribe((state, previous) => {
+        if (state.engine !== previous.engine) sync();
+      }),
+      useSettingsStore.subscribe(sync),
+      useZoneStore.subscribe(sync),
+      useProfileStore.subscribe(sync),
+    ];
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, []);
 
   // Re-check permissions on resume: the user may have changed them in Settings

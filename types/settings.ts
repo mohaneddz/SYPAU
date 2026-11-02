@@ -1,5 +1,8 @@
 export type TrackingMode = 'balanced' | 'highAccuracy' | 'batterySaver';
 
+/** When the pinned status notification stays in the shade. */
+export type StatusNotificationMode = 'off' | 'inZone' | 'profileActive' | 'always';
+
 export type AppSettings = {
   automationEnabled: boolean;
   backgroundMonitoringEnabled: boolean;
@@ -13,6 +16,7 @@ export type AppSettings = {
   notifyOnProfileChange: boolean;
   notifyOnZoneTransition: boolean;
   notifyOnError: boolean;
+  statusNotification: StatusNotificationMode;
 
   /** Activity log retention. 0 keeps everything. */
   logRetentionDays: number;
@@ -36,6 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyOnProfileChange: true,
   notifyOnZoneTransition: true,
   notifyOnError: true,
+  statusNotification: 'inZone',
 
   logRetentionDays: 30,
 

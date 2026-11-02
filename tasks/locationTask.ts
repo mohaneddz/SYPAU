@@ -2,6 +2,7 @@ import type * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 
 import { LOCATION_TASK_NAME } from '@/core/monitoring';
+import { syncStatusNotification } from '@/core/statusNotification';
 import { applyTransition, INITIAL_ENGINE_STATE, resolveActiveZone, type EngineState } from '@/core/zoneEngine';
 import { loadEngineState, saveEngineState } from '@/db/engineState';
 import { loadSettings } from '@/db/settings';
@@ -68,6 +69,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       state: backgroundState,
     });
     saveEngineState(backgroundState);
+    await syncStatusNotification({ state: backgroundState, settings, zones, profiles });
   } catch {
     // A throw here would have Android treat the task as misbehaving and back
     // off from waking us; losing one update is the lesser cost.
