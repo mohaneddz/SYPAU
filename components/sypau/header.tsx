@@ -121,8 +121,7 @@ export function SypauHeader({
       <View style={styles.center}>
         {handTitle ? null : <RedCross size={16} />}
         {handTitle ? (
-          // One line only: a wrapped second line falls outside the header strip,
-          // which is how "Activity Log" ended up reading as just "Activity".
+          // One line only: a wrapped second line falls outside the header strip.
           <SypauText
             variant="hand"
             caps

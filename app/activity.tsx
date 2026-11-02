@@ -63,7 +63,9 @@ export default function ActivityRoute() {
 
   return (
     <SypauScaffold
-      title="Activity Log"
+      // Matches the tab. "Activity Log" doesn't fit beside the two header
+      // actions, and Android dropped "Log" rather than shrinking it.
+      title="Activity"
       handTitle
       headerRight={
         <View style={styles.headerActions}>
