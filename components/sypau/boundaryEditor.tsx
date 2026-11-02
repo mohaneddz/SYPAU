@@ -67,25 +67,22 @@ export function BoundaryEditor({
   // survive undo and clear, and the next tap brought the old points back.
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  // A tap on a handle also reaches the map underneath; without this the same
-  // tap that picks a point would drop a new one beside it.
-  const handleTappedAt = useRef(0);
 
   const geometry = draftToGeometry(draft);
 
   const handleMapPress = useCallback(
-    (point: LatLng) => {
-      if (Date.now() - handleTappedAt.current < HANDLE_TAP_GRACE_MS) return;
+    async (point: LatLng, screen: [number, number]) => {
       const current = draftRef.current;
-      Haptics.selectionAsync().catch(() => {});
 
       if (current.type === 'radius') {
+        Haptics.selectionAsync().catch(() => {});
         onChange({ ...current, center: point });
         return;
       }
 
       // A picked point waits for this tap to say where it goes.
       if (selectedVertex !== null) {
+        Haptics.selectionAsync().catch(() => {});
         const points = [...current.points];
         points[selectedVertex] = point;
         onChange({ ...current, points });
@@ -93,18 +90,23 @@ export function BoundaryEditor({
         return;
       }
 
+      // While tracing every tap is a new point, even one landing on an old dot.
+      if (!tracing) {
+        const hit = await nearestVertex(current.points, screen, mapControl.current);
+        if (hit !== null) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          setSelectedVertex(hit);
+          return;
+        }
+      }
+
       if (current.type === 'polygon' || tracing) {
+        Haptics.selectionAsync().catch(() => {});
         onChange({ ...current, points: [...current.points, point] });
       }
     },
     [onChange, selectedVertex, tracing]
   );
-
-  const pickVertex = (index: number) => {
-    handleTappedAt.current = Date.now();
-    Haptics.selectionAsync().catch(() => {});
-    setSelectedVertex((current) => (current === index ? null : index));
-  };
 
   const finishTrace = () => {
     setTracing(false);
@@ -152,9 +154,6 @@ export function BoundaryEditor({
                   key={`${point.latitude},${point.longitude},${index}`}
                   point={point}
                   selected={selectedVertex === index}
-                  // While tracing, every tap adds a point; picking one up would
-                  // swallow taps that land near an existing handle.
-                  onPress={tracing ? undefined : () => pickVertex(index)}
                 />
               ))
             : null}
@@ -254,7 +253,7 @@ export function BoundaryEditor({
 
 function hintFor(draft: BoundaryDraft, tracing: boolean, selectedVertex: number | null): string {
   if (draft.type === 'radius') {
-    return draft.center ? 'Drag the slider to size it' : 'Tap the map to place the centre';
+    return draft.center ? 'Tap to move it · set the radius below' : 'Tap the map to place the centre';
   }
   if (selectedVertex !== null) return `Tap where point ${selectedVertex + 1} should go`;
   if (draft.type === 'freehand') {
@@ -267,7 +266,29 @@ function hintFor(draft: BoundaryDraft, tracing: boolean, selectedVertex: number 
   return `${draft.points.length} points — tap one to move it`;
 }
 
-const HANDLE_TAP_GRACE_MS = 350;
+/** How close a tap must land to a dot to pick it up: about a fingertip. */
+const VERTEX_HIT_RADIUS = 28;
+
+async function nearestVertex(
+  points: LatLng[],
+  screen: [number, number],
+  map: ZoneMapHandle | null
+): Promise<number | null> {
+  if (!map || points.length === 0) return null;
+
+  const projected = await Promise.all(points.map((point) => map.project(point)));
+  let best: number | null = null;
+  let bestDistance = VERTEX_HIT_RADIUS;
+  projected.forEach((position, index) => {
+    if (!position) return;
+    const distance = Math.hypot(position[0] - screen[0], position[1] - screen[1]);
+    if (distance <= bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
 
 function MapButton({
   icon,

@@ -5,6 +5,7 @@ import {
   Map,
   Marker,
   type CameraRef,
+  type MapRef,
 } from '@maplibre/maplibre-react-native';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -72,6 +73,8 @@ export type ZoneMapHandle = {
   fitAll: () => void;
   /** Frames just these shapes, e.g. the zone picked from a list. */
   fitTo: (geometries: Geometry[]) => void;
+  /** Where a point sits on screen, in the same units as a press's screen point. */
+  project: (point: LatLng) => Promise<[number, number] | null>;
 };
 
 type ZoneMapProps = {
@@ -82,7 +85,7 @@ type ZoneMapProps = {
   userLocation?: LatLng | null;
   /** Off for thumbnails and previews. */
   interactive?: boolean;
-  onPress?: (point: LatLng) => void;
+  onPress?: (point: LatLng, screen: [number, number]) => void;
   /** Kept in a ref so the map isn't re-rendered just to recentre it. */
   controlRef?: React.MutableRefObject<ZoneMapHandle | null>;
   /**
@@ -112,6 +115,7 @@ export function ZoneMap({
   children,
 }: ZoneMapProps) {
   const cameraRef = useRef<CameraRef>(null);
+  const mapRef = useRef<MapRef>(null);
   const zoomRef = useRef(zoom);
 
   // A fixed zoom frames a 100 m zone and a 3 km one identically, so one is a
@@ -163,12 +167,21 @@ export function ZoneMap({
         if (!target) return;
         cameraRef.current?.fitBounds(target, { padding, duration: 600 });
       },
+      project: async (point) => {
+        try {
+          const projected = await mapRef.current?.project(toLngLat(point));
+          return projected ? [projected[0], projected[1]] : null;
+        } catch {
+          return null;
+        }
+      },
     };
   }, [controlRef, padding]);
 
   return (
     <View style={[styles.map, style]}>
       <Map
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
         mapStyle={SYPAU_MAP_STYLE}
         logo={false}
@@ -185,7 +198,8 @@ export function ZoneMap({
           onPress
             ? (event) => {
                 const [longitude, latitude] = event.nativeEvent.lngLat;
-                onPress({ latitude, longitude });
+                const [x, y] = event.nativeEvent.point;
+                onPress({ latitude, longitude }, [x, y]);
               }
             : undefined
         }>
@@ -292,22 +306,15 @@ export function UserMarker({ point }: { point: LatLng }) {
   );
 }
 
-/** Editable vertex handle used by the boundary editor. */
-export function VertexHandle({
-  point,
-  selected = false,
-  onPress,
-}: {
-  point: LatLng;
-  selected?: boolean;
-  onPress?: () => void;
-}) {
+/**
+ * A vertex dot in the boundary editor. Display only: Android hands touches on
+ * markers to the map underneath, so picking one up is hit-tested from the map
+ * press instead (see BoundaryEditor).
+ */
+export function VertexHandle({ point, selected = false }: { point: LatLng; selected?: boolean }) {
   return (
     <Marker lngLat={toLngLat(point)} anchor="center">
-      {/* The dot is 16 px; a fingertip needs a target closer to 44. */}
-      <View onTouchEnd={onPress} style={styles.vertexTarget}>
-        <View style={[styles.vertex, selected && styles.vertexSelected]} />
-      </View>
+      <View style={[styles.vertex, selected && styles.vertexSelected]} />
     </Marker>
   );
 }
@@ -336,7 +343,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: SypauColor.ink,
   },
-  vertexTarget: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   vertex: {
     width: 16,
     height: 16,
