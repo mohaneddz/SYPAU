@@ -6,9 +6,10 @@ import {
   Marker,
   type CameraRef,
 } from '@maplibre/maplibre-react-native';
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { SypauText } from '@/components/sypau/text';
 import { SYPAU_MAP_STYLE } from '@/constants/map-style';
 import { SypauColor } from '@/constants/sypau';
 import { circlePolygonPoints, type Geometry, type LatLng } from '@/engine/geo';
@@ -128,6 +129,15 @@ export function ZoneMap({
 
   const cameraCenter = center ?? userLocation;
 
+  // Tiles come over the network, and until the first full render the map is a
+  // flat black panel that reads as broken. The timeout covers a render event
+  // that never comes (offline, or a tile that fails).
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLoaded(true), MAP_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     if (!controlRef) return;
 
@@ -170,6 +180,7 @@ export function ZoneMap({
         doubleTapZoom={interactive}
         touchRotate={false}
         touchPitch={false}
+        onDidFinishRenderingMapFully={() => setLoaded(true)}
         onPress={
           onPress
             ? (event) => {
@@ -205,9 +216,21 @@ export function ZoneMap({
 
         {children}
       </Map>
+
+      {/* Thumbnails are too small for a label; they just fill in. */}
+      {!loaded && interactive ? (
+        <View style={styles.loading} pointerEvents="none">
+          <ActivityIndicator color={SypauColor.cyan} />
+          <SypauText variant="labelSm" caps color={SypauColor.boneMuted}>
+            Loading map
+          </SypauText>
+        </View>
+      ) : null}
     </View>
   );
 }
+
+const MAP_LOAD_TIMEOUT_MS = 10_000;
 
 /**
  * Zone names drawn by the map itself rather than as React markers, so they
@@ -291,6 +314,12 @@ export function VertexHandle({
 
 const styles = StyleSheet.create({
   map: { overflow: 'hidden', backgroundColor: SypauColor.surface },
+  loading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   userHalo: {
     width: 30,
     height: 30,
