@@ -31,6 +31,24 @@ export type SystemEvent =
   | { type: 'geofenceError'; timestamp: number; message: string }
   | { type: 'serviceHealth'; timestamp: number; running: boolean };
 
+export type RadioProbeStep = {
+  radio: 'wifi' | 'bluetooth' | 'mobileData' | 'airplaneMode';
+  route: string;
+  before?: boolean;
+  target?: boolean;
+  accepted?: string | null;
+  after?: boolean | null;
+  worked?: boolean;
+  error?: string | null;
+};
+
+export type RadioProbeResult = {
+  writeSecureSettings: boolean;
+  bluetoothConnect: boolean;
+  deviceOwner: boolean;
+  steps: RadioProbeStep[];
+};
+
 type SypauSystemEvents = {
   onSystemEvent: (event: SystemEvent) => void;
 };
@@ -58,6 +76,10 @@ declare class SypauSystemModuleType extends NativeModule<SypauSystemEvents> {
   openMobileDataSettings(): boolean;
   openAirplaneModeSettings(): boolean;
   openBatteryOptimizationSettings(): boolean;
+
+  probeRadioControl(): Promise<RadioProbeResult>;
+  /** Gives device ownership back; a device-owner app can't be uninstalled until it does. */
+  releaseDeviceOwner(): boolean;
 
   registerGeofences(zones: GeofenceZoneRegistration[]): Promise<number>;
   clearGeofences(): Promise<boolean>;

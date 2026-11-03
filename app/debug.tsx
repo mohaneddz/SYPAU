@@ -15,6 +15,7 @@ import { isNativeAvailable } from '@/core/nativeBridge';
 import { isLocationUpdatesRunning } from '@/core/monitoring';
 import { SypauAsset, SypauColor, SypauRadius, SypauSpace } from '@/constants/sypau';
 import { listEvents } from '@/db/events';
+import { SypauSystem, type RadioProbeResult } from '@/modules/sypauSystem';
 import { distanceToEdge } from '@/engine/geo';
 import { refreshLocation } from '@/hooks/useSypauEngine';
 import { useEngineStore } from '@/state/useEngineStore';
@@ -48,6 +49,22 @@ export default function DebugRoute() {
   const fixFresh = fix !== null && now - fix.timestamp < FRESH_FIX_MS;
 
   const [selfTest, setSelfTest] = useState<SelfTestResult[] | null>(null);
+
+  // Flips each radio for a few seconds by every route there is, to find out
+  // which ones this install can really drive.
+  const [radioProbe, setRadioProbe] = useState<RadioProbeResult | null>(null);
+  const [probing, setProbing] = useState(false);
+  const runRadioProbe = async () => {
+    if (!SypauSystem) return;
+    setProbing(true);
+    try {
+      setRadioProbe(await SypauSystem.probeRadioControl());
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProbing(false);
+    }
+  };
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -342,6 +359,56 @@ export default function DebugRoute() {
           </DarkCard>
         </>
       ) : null}
+
+      {radioProbe ? (
+        <>
+          <SectionTitle>Radio control probe</SectionTitle>
+          <DarkCard>
+            <SypauText variant="bodySm" color={SypauColor.boneMuted}>
+              Secure settings {radioProbe.writeSecureSettings ? 'granted' : 'not granted'} · Bluetooth
+              connect {radioProbe.bluetoothConnect ? 'granted' : 'not granted'} · Device owner{' '}
+              {radioProbe.deviceOwner ? 'yes' : 'no'}
+            </SypauText>
+            {radioProbe.steps.map((step) => (
+              <View key={step.route} style={styles.logRow}>
+                <SypauIcon
+                  name={step.worked ? 'check' : 'close'}
+                  size={14}
+                  color={step.worked ? SypauColor.green : SypauColor.amber}
+                />
+                <SypauText variant="bodySm" style={styles.flex}>
+                  {step.route}
+                </SypauText>
+                <SypauText
+                  variant="bodySm"
+                  style={styles.resultDetail}
+                  color={step.worked ? SypauColor.green : SypauColor.amber}>
+                  {step.error ?? (step.worked ? 'Radio changed' : `Ignored (call: ${step.accepted})`)}
+                </SypauText>
+              </View>
+            ))}
+          </DarkCard>
+        </>
+      ) : null}
+
+      {radioProbe?.deviceOwner ? (
+        <RedButton
+          label="Release device owner"
+          variant="outline"
+          onPress={() => {
+            const released = SypauSystem?.releaseDeviceOwner() ?? false;
+            setNotice(released ? 'SYPAU is no longer device owner.' : 'SYPAU wasn’t device owner.');
+            setRadioProbe(null);
+          }}
+        />
+      ) : null}
+
+      <RedButton
+        label={probing ? 'Probing radios…' : 'Probe radio control'}
+        variant="outline"
+        disabled={probing || !SypauSystem}
+        onPress={() => void runRadioProbe()}
+      />
 
       <RedButton label="Force location update" onPress={() => void refreshLocation({ forced: true })} />
 

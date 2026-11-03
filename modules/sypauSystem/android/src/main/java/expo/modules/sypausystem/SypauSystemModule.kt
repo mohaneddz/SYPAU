@@ -138,6 +138,13 @@ class SypauSystemModule : Module() {
       geofences.clear { ok -> promise.resolve(ok) }
     }
 
+    // Debug only: flips each radio by each route and reports what really changed.
+    AsyncFunction("probeRadioControl") {
+      RadioProbe(context).run()
+    }
+
+    Function("releaseDeviceOwner") { SypauDeviceAdmin.release(context) }
+
     Function("startMonitoring") { mode: String, zoneName: String? ->
       trackingMode = mode
       // High accuracy is the only mode that needs a service of its own;

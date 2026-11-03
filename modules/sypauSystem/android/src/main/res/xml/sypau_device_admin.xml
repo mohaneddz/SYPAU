@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No policies: SYPAU never locks, wipes or restricts the phone. The admin
+     component exists only so device ownership can be assigned to it. -->
+<device-admin>
+  <uses-policies />
+</device-admin>
